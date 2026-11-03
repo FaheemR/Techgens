@@ -33,13 +33,21 @@ export function EditInitiativeDialog({
   );
 }
 
+type FieldErrors = Partial<Record<"title" | "budget", string>>;
+
+function titleError(value: string): string | undefined {
+  return value.trim() ? undefined : "Title is required";
+}
+
+function budgetError(value: string): string | undefined {
+  if (value.trim() === "") return undefined;
+  const n = Number(value);
+  return !Number.isFinite(n) || n <= 0 ? "Enter a positive number, or leave empty for no cap" : undefined;
+}
+
+/** Same pattern as New initiative: uncontrolled fields read with FormData on submit, app-level validation. */
 function EditForm({ initiative, onDone }: { initiative: InitiativeDetailDTO; onDone: () => void }) {
-  const [title, setTitle] = useState(initiative.title);
-  const [summary, setSummary] = useState(initiative.summary);
-  const [targetDate, setTargetDate] = useState(isoToDateInput(initiative.targetDate));
-  const [budget, setBudget] = useState(
-    initiative.budgetCredits === null ? "" : String(initiative.budgetCredits),
-  );
+  const [errors, setErrors] = useState<FieldErrors>({});
 
   const save = useApiMutation(
     (body: PatchBody) => api.patch<InitiativeDetailDTO>(`/api/initiatives/${initiative.id}`, body),
@@ -51,55 +59,76 @@ function EditForm({ initiative, onDone }: { initiative: InitiativeDetailDTO; onD
     },
   );
 
-  const budgetValue = budget.trim() === "" ? null : Number(budget);
-  const budgetInvalid = budgetValue !== null && (!Number.isFinite(budgetValue) || budgetValue < 0);
+  function revalidate(key: keyof FieldErrors, value: string) {
+    const message = key === "title" ? titleError(value) : budgetError(value);
+    setErrors((current) => (current[key] === message ? current : { ...current, [key]: message }));
+  }
 
-  function submit(event: FormEvent) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!title.trim() || budgetInvalid) return;
+    const data = new FormData(event.currentTarget);
+    const read = (key: string) => {
+      const value = data.get(key);
+      return typeof value === "string" ? value : "";
+    };
+    const title = read("title");
+    const budget = read("budget");
+    const targetDate = read("targetDate");
+    const next: FieldErrors = { title: titleError(title), budget: budgetError(budget) };
+    setErrors(next);
+    const firstInvalid = next.title ? "ei-title" : next.budget ? "ei-budget" : null;
+    if (firstInvalid) {
+      document.getElementById(firstInvalid)?.focus();
+      return;
+    }
     save.mutate({
       title: title.trim(),
-      summary,
+      summary: read("summary"),
       targetDate: targetDate ? (dateInputToIso(targetDate) ?? null) : null,
-      budgetCredits: budgetValue,
+      budgetCredits: budget.trim() === "" ? null : Number(budget),
     });
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <Field
-        label="Title"
-        htmlFor="ei-title"
-        required
-        error={!title.trim() ? "Title is required" : undefined}
-      >
-        <Input id="ei-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+    <form onSubmit={submit} className="space-y-4" noValidate>
+      <Field label="Title" htmlFor="ei-title" required error={errors.title}>
+        <Input
+          id="ei-title"
+          name="title"
+          defaultValue={initiative.title}
+          onInput={(e) => revalidate("title", e.currentTarget.value)}
+          aria-invalid={Boolean(errors.title)}
+          autoFocus
+        />
       </Field>
       <Field label="Summary" htmlFor="ei-summary" hint="Markdown supported">
-        <Textarea id="ei-summary" rows={6} value={summary} onChange={(e) => setSummary(e.target.value)} />
+        <Textarea id="ei-summary" name="summary" rows={6} defaultValue={initiative.summary} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Target date" htmlFor="ei-date">
           <Input
             id="ei-date"
+            name="targetDate"
             type="date"
-            value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
+            defaultValue={isoToDateInput(initiative.targetDate)}
           />
         </Field>
         <Field
           label="Budget (credits)"
           htmlFor="ei-budget"
           hint="Leave empty for no cap"
-          error={budgetInvalid ? "Enter a positive number" : undefined}
+          error={errors.budget}
         >
           <Input
             id="ei-budget"
+            name="budget"
             type="number"
             min={0}
-            step={10}
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
+            step="any"
+            inputMode="decimal"
+            defaultValue={initiative.budgetCredits === null ? "" : String(initiative.budgetCredits)}
+            onInput={(e) => revalidate("budget", e.currentTarget.value)}
+            aria-invalid={Boolean(errors.budget)}
           />
         </Field>
       </div>

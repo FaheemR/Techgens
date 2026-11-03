@@ -1,48 +1,70 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ApprovalDetailDTO, ApprovalOutcome, ApprovalSummaryDTO } from "@techgens/core";
+import type { ApprovalDetailDTO, ApprovalOutcome, ApprovalStatus, ApprovalSummaryDTO } from "@techgens/core";
 import { APPROVAL_KINDS, GATE_LABELS } from "@techgens/core";
-import { Inbox, PartyPopper, ShieldOff } from "lucide-react";
+import { Inbox, PartyPopper, ShieldOff, TriangleAlert } from "lucide-react";
 import { QueryView } from "@/components/common/query-view";
 import { ApprovalKindBadge, ApprovalStatusBadge } from "@/components/common/status";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Select } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
-import { SkeletonRows } from "@/components/ui/skeleton";
+import { PageSkeleton, SkeletonRows } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { relativeTime } from "@/lib/format";
 import { useNow, useQueryParams } from "@/lib/hooks";
 import { STAGE_GATE_KINDS, approvalDisplayTitle, approvalHeadline } from "@/lib/labels";
 import { qk, useApprovals, useSettings } from "@/lib/queries";
-import { cn } from "@/lib/utils";
+import { asNumber, cn } from "@/lib/utils";
 import { ApprovalDetailPane } from "./approval-detail";
+import { creditsLabel, formatWindowEnd, overrunScopeLabel, readOverrun } from "./budget-grant";
+import { FOCUS_FLASH_INSET, focusWithFlash } from "./focus-flash";
 
-type Filter = "pending" | "changes_requested" | "approved" | "rejected" | "cancelled" | "all";
+/** URL values of the status filter (`?status=`); "pending" is the default and has no parameter. */
+type Filter = "pending" | "in-revision" | "approved" | "rejected" | "withdrawn" | "all";
 
-const FILTERS: Array<{ value: Filter; label: string }> = [
-  { value: "pending", label: "Pending" },
-  { value: "changes_requested", label: "Changes requested" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "cancelled", label: "Withdrawn" },
-  { value: "all", label: "All" },
+const FILTERS: Array<{ value: Filter; label: string; status: ApprovalStatus | undefined }> = [
+  { value: "pending", label: "Pending", status: "pending" },
+  { value: "in-revision", label: "In revision", status: "changes_requested" },
+  { value: "approved", label: "Approved", status: "approved" },
+  { value: "rejected", label: "Rejected", status: "rejected" },
+  { value: "withdrawn", label: "Withdrawn", status: "cancelled" },
+  { value: "all", label: "All", status: undefined },
 ];
 
+/** Other accepted spellings: API statuses and label variants (old links, hand-typed URLs). */
+const FILTER_ALIASES: Record<string, Filter> = {
+  changes_requested: "in-revision",
+  "changes-requested": "in-revision",
+  in_revision: "in-revision",
+  revision: "in-revision",
+  cancelled: "withdrawn",
+  canceled: "withdrawn",
+};
+
+/** Validates `?status=`: unknown values fall back to Pending (and are reported) instead of reaching the API. */
+function parseFilter(raw: string | null): { filter: Filter; unknown: string | null } {
+  if (!raw) return { filter: "pending", unknown: null };
+  const key = raw.trim().toLowerCase().replace(/\s+/g, "-");
+  const match = FILTERS.find((f) => f.value === key)?.value ?? FILTER_ALIASES[key];
+  return match ? { filter: match, unknown: null } : { filter: "pending", unknown: raw };
+}
+
 const EMPTY: Record<Exclude<Filter, "pending">, { title: string; description: string }> = {
-  changes_requested: {
+  "in-revision": {
     title: "Nothing in revision",
     description:
-      "Nothing is waiting on a revision. Items you send back with “Request changes” stay here until the team resubmits them.",
+      "When you request changes, the item waits here until the team resubmits it — usually within minutes.",
   },
   approved: {
     title: "Nothing approved yet",
     description: "Gates you approve are kept here with their decision history.",
   },
   rejected: { title: "Nothing rejected", description: "Gates you reject are kept here with your reasons." },
-  cancelled: {
+  withdrawn: {
     title: "Nothing withdrawn",
     description: "Approvals are withdrawn automatically when their initiative is cancelled.",
   },
@@ -53,25 +75,59 @@ const EMPTY: Record<Exclude<Filter, "pending">, { title: string; description: st
   },
 };
 
-function decisionToast(approval: ApprovalDetailDTO, outcome: ApprovalOutcome): string {
+function decisionToast(
+  approval: ApprovalDetailDTO,
+  outcome: ApprovalOutcome,
+  grantedCredits: number | undefined,
+): { title: string; detail: string | null } {
   if (outcome === "approved") {
-    return approval.kind === "budget_overrun"
-      ? "Credits granted — work resumes"
-      : "Approved — the team is moving on";
+    if (approval.kind !== "budget_overrun")
+      return { title: "Approved — the team is moving on", detail: null };
+    // Prefer the amount the orchestrator recorded; otherwise the amount that was sent.
+    const granted = asNumber(approval.payload?.grantedExtraCredits) ?? grantedCredits;
+    const ends = readOverrun(approval.payload ?? {}, approval.summary, undefined).windowEndsAt;
+    return {
+      title:
+        granted !== undefined
+          ? `Granted ${creditsLabel(granted)} — work resumes`
+          : "Credits granted — work resumes",
+      detail: ends ? `Valid until ${formatWindowEnd(ends)}` : null,
+    };
   }
-  if (outcome === "changes_requested") return "Changes requested — the team will revise and resubmit";
-  return approval.initiativeId && STAGE_GATE_KINDS.includes(approval.kind)
-    ? "Rejected — the team has your reason"
-    : "Rejected";
+  if (outcome === "changes_requested") {
+    return { title: "Changes requested — the team will revise and resubmit", detail: null };
+  }
+  return {
+    title:
+      approval.initiativeId && STAGE_GATE_KINDS.includes(approval.kind)
+        ? "Rejected — the team has your reason"
+        : "Rejected",
+    detail: null,
+  };
+}
+
+const subscribeNothing = () => () => {};
+
+/**
+ * False during the server render and hydration, true afterwards (and right away on client navigations). The inbox
+ * shares the sidebar's pending-approvals query, so hydrating it with that data could differ from the server HTML.
+ */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    subscribeNothing,
+    () => true,
+    () => false,
+  );
 }
 
 export function ApprovalsView() {
+  const hydrated = useHydrated();
   const { get, set } = useQueryParams();
-  const filter = (get("status") as Filter | null) ?? "pending";
+  const { filter, unknown: unknownStatus } = parseFilter(get("status"));
   const selectedId = get("id");
   const queryClient = useQueryClient();
   const toast = useToast();
-  const list = useApprovals(filter === "all" ? undefined : filter);
+  const list = useApprovals(FILTERS.find((f) => f.value === filter)?.status);
   const pendingList = useApprovals("pending");
   const settings = useSettings();
   const now = useNow();
@@ -101,7 +157,7 @@ export function ApprovalsView() {
   useEffect(() => {
     if (selectedId || focusAfterDecision.current !== "list") return;
     focusAfterDecision.current = null;
-    listRef.current?.focus();
+    focusWithFlash(listRef.current);
   }, [selectedId]);
 
   const takeFocus = useCallback(() => {
@@ -110,7 +166,7 @@ export function ApprovalsView() {
     return true;
   }, []);
 
-  function onDecided(decided: ApprovalDetailDTO, outcome: ApprovalOutcome) {
+  function onDecided(decided: ApprovalDetailDTO, outcome: ApprovalOutcome, grantedCredits?: number) {
     queryClient.setQueryData(qk.approval(decided.id), decided);
     const pending = (pendingList.data ?? []).filter((a) => a.status === "pending");
     const index = pending.findIndex((a) => a.id === decided.id);
@@ -119,23 +175,35 @@ export function ApprovalsView() {
     queryClient.setQueryData<ApprovalSummaryDTO[]>(qk.approvals("pending"), (current) =>
       current?.filter((a) => a.id !== decided.id),
     );
+    const message = decisionToast(decided, outcome, grantedCredits);
     toast.success(
-      decisionToast(decided, outcome),
-      next ? `Next: ${approvalHeadline(next.kind, next.title)}` : "Nothing else is waiting on you.",
+      message.title,
+      [
+        message.detail,
+        next ? `Next: ${approvalHeadline(next.kind, next.title)}` : "Nothing else is waiting on you.",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     );
     focusAfterDecision.current = next ? "detail" : "list";
     set({
       id: next?.id ?? null,
-      ...(next && filter !== "pending" && filter !== "all" ? { status: "pending" } : {}),
+      ...(next && filter !== "pending" && filter !== "all" ? { status: null } : {}),
     });
   }
 
   const empty = filter === "pending" ? null : EMPTY[filter];
 
+  function changeFilter(value: Filter) {
+    set({ status: value === "pending" ? null : value, id: null });
+  }
+
+  if (!hydrated) return <PageSkeleton />;
+
   return (
     <div className="flex h-[calc(100dvh-7.5rem)] min-h-[560px] flex-col">
-      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div>
+      <div className="mb-4 flex flex-col gap-3 min-[1366px]:flex-row min-[1366px]:items-end min-[1366px]:justify-between">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <h1 className="text-2xl font-semibold tracking-tight">Approvals</h1>
             {offGates.length > 0 ? (
@@ -159,20 +227,54 @@ export function ApprovalsView() {
             Stage gates, releases, deployments and budget decisions waiting on the CEO.
           </p>
         </div>
-        <Segmented
-          label="Filter approvals"
-          options={FILTERS.map((f) => ({
-            ...f,
-            count: f.value === "pending" ? pendingList.data?.length : undefined,
-          }))}
-          value={filter}
-          onChange={(value) => set({ status: value === "pending" ? null : value, id: null })}
-        />
+        <div className="shrink-0">
+          <div className="flex items-center gap-2 sm:hidden">
+            <label htmlFor="approvals-filter" className="text-sm text-muted">
+              Show
+            </label>
+            <Select
+              id="approvals-filter"
+              className="min-w-0 flex-1"
+              value={filter}
+              onChange={(event) => changeFilter(event.target.value as Filter)}
+            >
+              {FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                  {f.value === "pending" && pendingList.data ? ` (${pendingList.data.length})` : ""}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <Segmented
+            label="Filter approvals"
+            className="max-sm:hidden"
+            options={FILTERS.map((f) => ({
+              value: f.value,
+              label: f.label,
+              count: f.value === "pending" ? pendingList.data?.length : undefined,
+            }))}
+            value={filter}
+            onChange={changeFilter}
+          />
+        </div>
       </div>
+      {unknownStatus ? (
+        <p className="-mt-2 mb-3 flex items-center gap-1.5 text-xs text-amber-200">
+          <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate">
+            Unknown filter “{unknownStatus.slice(0, 40)}” — showing Pending.
+          </span>
+        </p>
+      ) : null}
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]">
         <Card className={cn("flex min-h-0 flex-col overflow-hidden", selectedId && "hidden lg:flex")}>
-          <div ref={listRef} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
+          <div
+            ref={listRef}
+            tabIndex={-1}
+            className={cn("min-h-0 flex-1 overflow-y-auto", FOCUS_FLASH_INSET)}
+          >
             <QueryView
               query={list}
               loading={<SkeletonRows rows={6} className="p-4" />}
@@ -193,6 +295,8 @@ export function ApprovalsView() {
                 <ul aria-label="Approvals" className="divide-y divide-border/70">
                   {data.map((approval) => {
                     const selected = approval.id === selectedId;
+                    const scopeLabel =
+                      approval.kind === "budget_overrun" ? overrunScopeLabel(approval) : null;
                     return (
                       <li key={approval.id}>
                         <button
@@ -223,7 +327,7 @@ export function ApprovalsView() {
                           </p>
                           <div className="mt-1 flex items-center justify-between gap-2">
                             <p className="truncate text-xs text-muted">
-                              {approval.initiativeTitle ?? "Company-wide"}
+                              {scopeLabel ?? approval.initiativeTitle ?? "Company-wide"}
                               {approval.requestedBy ? ` · ${approval.requestedBy}` : ""}
                               {approval.round > 1 ? ` · round ${approval.round}` : ""}
                             </p>

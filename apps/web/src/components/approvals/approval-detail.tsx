@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type Ref,
+  type RefObject,
+} from "react";
 import Link from "next/link";
 import type { ApprovalDetailDTO, ApprovalOutcome, DecideApprovalRequest, DocumentDTO } from "@techgens/core";
 import { GATE_LABELS } from "@techgens/core";
@@ -28,22 +36,30 @@ import { LoadingBlock } from "@/components/ui/spinner";
 import { Tabs } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { formatDateTime, relativeTime } from "@/lib/format";
-import { useNow } from "@/lib/hooks";
+import { useMediaQuery, useNow } from "@/lib/hooks";
 import {
   APPROVAL_INTENT,
   APPROVAL_STATUS_TONE,
   DECISION_PLACEHOLDERS,
   STAGE_GATE_KINDS,
   approvalDisplayTitle,
-  approvalStatusLabel,
+  approvalOutcomeLabel,
   documentKindLabel,
   gateLabelLower,
 } from "@/lib/labels";
 import { useApiMutation } from "@/lib/mutations";
 import { qk, useApproval, useBudgets } from "@/lib/queries";
 import { asString, cn, isRecord } from "@/lib/utils";
-import { grantConsequence, readOverrun } from "./budget-grant";
+import { grantConsequence, overrunScopeLabel, parseCreditsInput, readOverrun } from "./budget-grant";
+import { FOCUS_FLASH_OUTLINE, focusWithFlash } from "./focus-flash";
 import { PayloadDetails } from "./payload-details";
+
+/** Called after a decision is recorded; `grantedCredits` is the amount sent for a budget grant. */
+export type OnDecided = (
+  approval: ApprovalDetailDTO,
+  outcome: ApprovalOutcome,
+  grantedCredits?: number,
+) => void;
 
 export function ApprovalDetailPane({
   id,
@@ -52,7 +68,7 @@ export function ApprovalDetailPane({
   takeFocus,
 }: {
   id: string;
-  onDecided: (approval: ApprovalDetailDTO, outcome: ApprovalOutcome) => void;
+  onDecided: OnDecided;
   onBack: () => void;
   /** Returns true (once) when the heading should receive focus, e.g. after a decision advanced the inbox. */
   takeFocus: () => boolean;
@@ -84,9 +100,11 @@ function approvalIntent(approval: ApprovalDetailDTO): string {
     const environment = asString(payload.environment) ?? "production";
     const rollback =
       asString(payload.rollback) ?? /rollback:\s*([^\n]+)/i.exec(approval.summary ?? "")?.[1]?.trim();
-    const what = [version ? `version ${version}` : null, sha ? `(${sha.slice(0, 7)})` : null]
-      .filter(Boolean)
-      .join(" ");
+    const what = version
+      ? `version ${version}${sha ? ` (${sha.slice(0, 7)})` : ""}`
+      : sha
+        ? `commit ${sha.slice(0, 7)}`
+        : "";
     const rollbackText = !rollback
       ? "No rollback plan was provided — ask for one before approving."
       : rollback.includes("\n") || rollback.length > 160
@@ -118,7 +136,7 @@ function ApprovalDetail({
   takeFocus,
 }: {
   approval: ApprovalDetailDTO;
-  onDecided: (approval: ApprovalDetailDTO, outcome: ApprovalOutcome) => void;
+  onDecided: OnDecided;
   takeFocus: () => boolean;
 }) {
   const now = useNow();
@@ -128,8 +146,9 @@ function ApprovalDetail({
   const intent = pending ? approvalIntent(approval) : "";
 
   useEffect(() => {
-    if (takeFocus()) headingRef.current?.focus();
+    if (takeFocus()) focusWithFlash(headingRef.current);
   }, [takeFocus]);
+  const scopeLabel = approval.kind === "budget_overrun" ? overrunScopeLabel(approval) : null;
 
   return (
     <>
@@ -144,7 +163,7 @@ function ApprovalDetail({
             <h2
               ref={headingRef}
               tabIndex={-1}
-              className="mt-2 rounded-sm text-xl font-semibold leading-snug outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className={cn("mt-2 rounded-sm text-xl font-semibold leading-snug", FOCUS_FLASH_OUTLINE)}
             >
               <span className="sr-only">{GATE_LABELS[approval.kind] ?? approval.kind}: </span>
               {approvalDisplayTitle(approval.kind, approval.title)}
@@ -156,8 +175,13 @@ function ApprovalDetail({
                   className="inline-flex items-center gap-1 text-accent hover:underline"
                 >
                   <Rocket aria-hidden className="size-3.5" />
-                  {approval.initiativeTitle ?? "Initiative"}
+                  {scopeLabel ?? approval.initiativeTitle ?? "Initiative"}
                 </Link>
+              ) : scopeLabel ? (
+                <span className="inline-flex items-center gap-1">
+                  <Coins aria-hidden className="size-3.5" />
+                  {scopeLabel}
+                </span>
               ) : (
                 <span>Company-wide</span>
               )}
@@ -225,7 +249,7 @@ function ApprovalDetail({
                   >
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <Badge tone={APPROVAL_STATUS_TONE[d.outcome] ?? "neutral"} dot>
-                        {approvalStatusLabel(d.outcome)}
+                        {approvalOutcomeLabel(d.outcome)}
                       </Badge>
                       <span className="text-xs text-subtle">
                         Round {d.round} · {formatDateTime(d.createdAt)}
@@ -328,9 +352,8 @@ function BudgetGrantField({
     return suggested !== null ? String(suggested) : "";
   });
   const [text, setText] = useState(initial);
-  const value = text.trim() === "" ? null : Number(text);
-  const consequence =
-    value !== null && Number.isFinite(value) && value > 0 ? grantConsequence(value, facts) : null;
+  const { value } = parseCreditsInput(text);
+  const consequence = value !== null ? grantConsequence(value, facts) : null;
   return (
     <Field
       label="Extra credits"
@@ -342,10 +365,10 @@ function BudgetGrantField({
         id="extra-credits"
         name="extraCredits"
         ref={inputRef}
-        type="number"
-        min={0}
-        step="any"
+        type="text"
         inputMode="decimal"
+        autoComplete="off"
+        spellCheck={false}
         defaultValue={initial}
         onInput={(event) => {
           setText(event.currentTarget.value);
@@ -358,17 +381,17 @@ function BudgetGrantField({
   );
 }
 
-function DecisionBar({
-  approval,
-  onDecided,
-}: {
-  approval: ApprovalDetailDTO;
-  onDecided: (approval: ApprovalDetailDTO, outcome: ApprovalOutcome) => void;
-}) {
+function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onDecided: OnDecided }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const extraRef = useRef<HTMLInputElement>(null);
   const isBudget = approval.kind === "budget_overrun";
+  // Compact bar on narrow panes (phones, small laptops) and short viewports (< 800 px tall), so the brief stays
+  // readable: one-line comment that expands on focus, inline hint, one row of buttons.
+  const narrow = useNarrowerThan(rootRef, 448);
+  const shortViewport = useMediaQuery("(max-height: 799.98px)");
+  const compact = narrow || shortViewport;
 
   const [error, setError] = useState<string | null>(null);
   const [extraError, setExtraError] = useState<string | null>(null);
@@ -383,7 +406,7 @@ function DecisionBar({
       invalidate: [["approvals"], qk.dashboard, ["initiatives"], ["notifications"], ["budgets"], ["usage"]],
       onSuccess: (result, body) => {
         setConfirmReject(false);
-        onDecided(result, body.outcome);
+        onDecided(result, body.outcome, body.extraCredits);
       },
     },
   );
@@ -421,13 +444,14 @@ function DecisionBar({
     const body: DecideApprovalRequest = { outcome };
     if (comment) body.comment = comment;
     if (isBudget && outcome === "approved") {
-      const amount = Number(extra);
-      if (!extra || !Number.isFinite(amount) || amount <= 0) {
-        setExtraError(extra ? "Enter a positive number of credits." : "Enter how many credits to grant.");
+      // Exactly what the field shows (decimals included); never fall back to the suggested amount.
+      const parsed = parseCreditsInput(extra);
+      if (parsed.value === null) {
+        setExtraError(parsed.error);
         extraRef.current?.focus();
         return;
       }
-      body.extraCredits = amount;
+      body.extraCredits = parsed.value;
     }
     if (outcome === "rejected" && !confirmed) {
       setConfirmReject(true);
@@ -446,7 +470,15 @@ function DecisionBar({
   const stageGate = Boolean(approval.initiativeId) && STAGE_GATE_KINDS.includes(approval.kind);
 
   return (
-    <div className="@container border-t border-border bg-surface-2/80 px-4 py-3 backdrop-blur sm:px-5 sm:py-4">
+    <div
+      ref={rootRef}
+      data-compact={compact || undefined}
+      className={cn(
+        "@container border-t border-border bg-surface-2/80 px-4 py-3 backdrop-blur",
+        !compact && "sm:px-5 sm:py-4",
+        compact && "sm:px-5",
+      )}
+    >
       <form ref={formRef} onSubmit={onSubmit} noValidate aria-label="Your decision">
         <div className={cn("grid gap-3", isBudget && "@lg:grid-cols-[15rem_minmax(0,1fr)]")}>
           {isBudget ? (
@@ -458,15 +490,27 @@ function DecisionBar({
             />
           ) : null}
           <Field
-            label="Comment for the team"
+            label={
+              compact ? (
+                <>
+                  Comment for the team{" "}
+                  <span className="text-xs font-normal text-subtle">
+                    · {isBudget ? "optional to grant, required to reject" : "optional to approve"}
+                  </span>
+                </>
+              ) : (
+                "Comment for the team"
+              )
+            }
             htmlFor="decision-comment"
             hint={
-              isBudget
-                ? "Optional when granting; required to reject."
-                : "Optional when approving; required to request changes or reject."
+              compact
+                ? undefined
+                : isBudget
+                  ? "Optional when granting; required to reject."
+                  : "Optional when approving; required to request changes or reject."
             }
             error={error ?? undefined}
-            className="@max-md:[&>p:not([role=alert])]:hidden"
           >
             <Textarea
               id="decision-comment"
@@ -484,14 +528,17 @@ function DecisionBar({
               data-filled={hasComment || undefined}
               className={cn(
                 "min-h-14",
-                // Narrow panes (phones, small laptops): one compact line that expands while focused or filled,
-                // so the brief above stays readable.
-                "@max-md:h-9 @max-md:min-h-9 @max-md:resize-none @max-md:py-1.5 @max-md:focus:h-24 @max-md:data-[filled]:h-24",
+                compact && "h-9 min-h-9 resize-none py-1.5 focus:h-24 data-[filled]:h-24",
               )}
             />
           </Field>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 @max-md:mt-2 @max-md:flex-nowrap @max-md:[&>button]:flex-1">
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-end gap-2",
+            compact ? "mt-2 flex-nowrap [&>button]:flex-1" : "mt-3",
+          )}
+        >
           <Button
             variant="outline"
             className="border-rose-400/40 text-rose-200 hover:bg-rose-500/10"
@@ -514,8 +561,7 @@ function DecisionBar({
               {decide.isPending && decide.variables?.outcome === "changes_requested" ? null : (
                 <MessageSquareWarning />
               )}
-              <span className="@md:hidden">Changes</span>
-              <span className="@max-md:hidden">Request changes</span>
+              {narrow ? "Changes" : "Request changes"}
             </Button>
           ) : null}
           <Button
@@ -560,4 +606,19 @@ function DecisionBar({
       </Dialog>
     </div>
   );
+}
+
+/** Whether the element is narrower than `px` (tracks resizes). Measured before paint, so the layout doesn't jump. */
+function useNarrowerThan(ref: RefObject<HTMLElement | null>, px: number): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setNarrow(el.getBoundingClientRect().width < px);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, px]);
+  return narrow;
 }
