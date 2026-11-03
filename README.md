@@ -19,6 +19,11 @@ CEO ──▶ Command Center (Next.js) ──▶ Orchestrator (Fastify · Postgr
                                         └─ Delivery ─▶ GitHub (issues → Copilot cloud agent → PRs → Actions) ─▶ Azure
 ```
 
+| Approve every key gate | Watch the company work |
+|---|---|
+| ![Approvals inbox with a PRD awaiting the CEO's decision](docs/images/approvals.png) | ![Initiative with all 11 lifecycle stages completed](docs/images/initiative.png) |
+| ![Org chart of the AI staff](docs/images/org-chart.png) | ![Work board with GitHub issues and merged pull requests](docs/images/work-board.png) |
+
 ## Quick start
 
 **Try it first in demo mode**: the agents follow scripts and GitHub is simulated, so it spends no Copilot credits and

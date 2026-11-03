@@ -43,6 +43,8 @@ curl -s http://localhost:3000/api/system  # {"version":"0.1.0","paused":false,"d
 
 ## 2. Take the tour (demo mode, about 10 minutes)
 
+![Dashboard with an initiative waiting for the CEO's approval](images/dashboard.png)
+
 | Step | Where | What to check |
 |---|---|---|
 | 1 | **Dashboard** | The top bar shows **Demo mode**, the **Live** indicator and **Pause all agents**. |
