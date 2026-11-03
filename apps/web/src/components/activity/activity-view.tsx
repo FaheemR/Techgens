@@ -33,7 +33,7 @@ export function ActivityView() {
         title="Activity & jobs"
         description="Everything your company does, as it happens: directives, delegations, tool calls, approvals, documents and spend."
       />
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <Card className="flex min-h-0 flex-col">
           <EventFeedPanel typeFilter={typeFilter} agentFilter={agentFilter} onChange={set} />
         </Card>
@@ -108,7 +108,7 @@ function EventFeedPanel({
           </Button>
         }
       />
-      <div className="grid gap-2 border-b border-border px-4 py-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 border-b border-border px-4 py-3 sm:grid-cols-2">
         <div>
           <label htmlFor="event-type" className="sr-only">
             Event type

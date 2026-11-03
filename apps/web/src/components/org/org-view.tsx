@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { AgentDTO, OrgDTO } from "@techgens/core";
 import { LayoutList, Network, Users } from "lucide-react";
 import { AgentAvatar } from "@/components/common/agent-avatar";
+import { Credits } from "@/components/common/credits";
 import { PageHeader } from "@/components/common/page-header";
 import { QueryView } from "@/components/common/query-view";
 import { DepartmentBadge, ExecutorBadge } from "@/components/common/status";
@@ -17,8 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingBlock } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { credits, humanize } from "@/lib/format";
-import { useQueryParams } from "@/lib/hooks";
+import { humanize } from "@/lib/format";
+import { useMediaQuery, useQueryParams } from "@/lib/hooks";
 import { departmentStyle } from "@/lib/labels";
 import { useCompany, useOrg } from "@/lib/queries";
 import { AgentSheet } from "./agent-sheet";
@@ -32,7 +33,10 @@ type View = "chart" | "directory";
 
 export function OrgView() {
   const { get, set } = useQueryParams();
-  const view = (get("view") as View | null) ?? "chart";
+  // The chart needs room to be readable; phones start on the directory unless ?view= asks for the chart.
+  const defaultView: View = useMediaQuery("(min-width: 768px)", true) ? "chart" : "directory";
+  const requested = get("view");
+  const view: View = requested === "chart" || requested === "directory" ? requested : defaultView;
   const agentId = get("agent");
   const [showRetired, setShowRetired] = useState(false);
   const org = useOrg();
@@ -54,7 +58,7 @@ export function OrgView() {
             <Segmented
               label="Org view"
               value={view}
-              onChange={(v) => set({ view: v === "chart" ? null : v })}
+              onChange={(v) => set({ view: v === defaultView ? null : v })}
               options={[
                 {
                   value: "chart",
@@ -242,9 +246,11 @@ function Directory({
                     label={`${agent.name} daily budget`}
                     size="sm"
                   />
-                  <span className="shrink-0 text-xs tabular-nums text-muted">
-                    {credits(agent.spentTodayCredits)}/{credits(agent.dailyBudgetCredits)}
-                  </span>
+                  <Credits
+                    value={agent.spentTodayCredits}
+                    of={agent.dailyBudgetCredits}
+                    className="shrink-0 text-xs text-muted"
+                  />
                 </div>
               </TD>
             </TR>

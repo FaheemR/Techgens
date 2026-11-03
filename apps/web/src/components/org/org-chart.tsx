@@ -81,17 +81,20 @@ function AgentNodeView({ data }: NodeProps<AgentFlowNode>) {
                   className={cn(
                     "size-2 shrink-0 rounded-full",
                     STATUS_DOT[agent.status],
-                    busy && "animate-pulse",
+                    busy && "motion-safe:animate-pulse-brief",
                   )}
                 />
               </span>
               <span className={cn("block truncate text-[11px]", dept.text)}>{agent.roleTitle}</span>
             </span>
           </span>
-          <span className="flex items-center gap-1.5 text-[10px]">
+          <span className="flex items-center gap-1.5 text-[11px]">
             {agent.executor === "cloud-agent" ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-px font-medium text-cyan-200">
-                <Cloud aria-hidden className="size-2.5" /> Copilot cloud agent
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-px font-medium text-cyan-200"
+                title="Copilot cloud agent"
+              >
+                <Cloud aria-hidden className="size-2.5" /> Cloud agent
               </span>
             ) : (
               <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-px text-muted">
@@ -103,8 +106,11 @@ function AgentNodeView({ data }: NodeProps<AgentFlowNode>) {
                 {agent.activeJobs} job{agent.activeJobs === 1 ? "" : "s"}
               </span>
             ) : null}
-            <span className="ml-auto tabular-nums text-subtle" title="Credits spent today / daily budget">
-              {credits(agent.spentTodayCredits)}/{credits(agent.dailyBudgetCredits)}
+            <span
+              className="ml-auto whitespace-nowrap tabular-nums text-subtle"
+              title="AI credits spent today / daily budget"
+            >
+              {credits(agent.spentTodayCredits)} / {credits(agent.dailyBudgetCredits)}
             </span>
           </span>
           <span

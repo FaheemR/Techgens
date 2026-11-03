@@ -39,6 +39,11 @@ const PERIOD_LABEL: Record<BudgetPeriod, string> = {
 };
 const STATE_TONE = { ok: "success", warn: "warning", exceeded: "danger" } as const;
 
+/** "Company monthly budget" — names row actions; a scope can have one budget per period. */
+function budgetName(budget: BudgetDTO): string {
+  return `${budget.scopeLabel} ${PERIOD_LABEL[budget.period].toLowerCase()} budget`;
+}
+
 function toUpsert(budget: BudgetDTO, patch: Partial<BudgetUpsert> = {}): BudgetUpsert {
   return {
     scope: budget.scope,
@@ -113,9 +118,9 @@ export function BudgetsEditor() {
                 <tr>
                   <TH>Scope</TH>
                   <TH>Period</TH>
-                  <TH className="text-right">Limit</TH>
+                  <TH className="text-right">Limit (credits)</TH>
                   <TH className="text-right">Warn at</TH>
-                  <TH className="w-56">Spent</TH>
+                  <TH className="w-56">Spent (credits)</TH>
                   <TH>Enabled</TH>
                   <TH>
                     <span className="sr-only">Actions</span>
@@ -146,7 +151,7 @@ export function BudgetsEditor() {
                             value={budget.spentCredits}
                             max={budget.limitCredits}
                             warnAt={budget.warnPct / 100}
-                            label={`${budget.scopeLabel} budget used`}
+                            label={`${budgetName(budget)} used`}
                             size="sm"
                           />
                           <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted">
@@ -162,7 +167,7 @@ export function BudgetsEditor() {
                       <TD>
                         <Switch
                           checked={budget.enabled}
-                          label={`${budget.enabled ? "Disable" : "Enable"} ${budget.scopeLabel} ${budget.period} budget`}
+                          label={`Enforce ${budgetName(budget)}`}
                           disabled={upsert.isPending}
                           onCheckedChange={(enabled) => upsert.mutate([toUpsert(budget, { enabled })])}
                         />
@@ -172,7 +177,7 @@ export function BudgetsEditor() {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`Edit ${budget.scopeLabel} budget`}
+                            aria-label={`Edit ${budgetName(budget)}`}
                             onClick={() => setEditing({ mode: "edit", budget })}
                           >
                             <Pencil />
@@ -180,7 +185,7 @@ export function BudgetsEditor() {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`Delete ${budget.scopeLabel} budget`}
+                            aria-label={`Delete ${budgetName(budget)}`}
                             onClick={() => setDeleting(budget)}
                           >
                             <Trash2 />
@@ -360,7 +365,7 @@ function BudgetForm({ budget, onDone }: { budget: BudgetDTO | null; onDone: () =
         </Field>
       </div>
       <label className="flex items-center gap-3 text-sm">
-        <Switch checked={enabled} onCheckedChange={setEnabled} label="Budget enabled" />
+        <Switch checked={enabled} onCheckedChange={setEnabled} label="Enforce this budget" />
         Enforce this budget
       </label>
       {locked ? (

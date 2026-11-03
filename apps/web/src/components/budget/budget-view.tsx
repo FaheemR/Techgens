@@ -78,9 +78,13 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
     <div className={cn("space-y-6 transition-opacity", fetching && "opacity-80")}>
       <section aria-label="Spend totals" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <KpiCard
-          label="Today"
+          label="Credits today"
           value={credits(data.todayCredits)}
-          sub={dayBudget ? `of ${credits(dayBudget.limitCredits)} daily budget` : "credits"}
+          sub={
+            dayBudget
+              ? `of ${credits(dayBudget.limitCredits)} daily budget · ${percent(data.todayCredits / dayBudget.limitCredits)}`
+              : "No daily company budget"
+          }
           icon={Coins}
           tone={dayBudget && data.todayCredits >= dayBudget.limitCredits ? "danger" : "accent"}
         >
@@ -95,9 +99,13 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
           ) : null}
         </KpiCard>
         <KpiCard
-          label="This week"
+          label="Credits this week"
           value={credits(data.weekCredits)}
-          sub={weekBudget ? `of ${credits(weekBudget.limitCredits)} weekly budget` : "credits"}
+          sub={
+            weekBudget
+              ? `of ${credits(weekBudget.limitCredits)} weekly budget · ${percent(data.weekCredits / weekBudget.limitCredits)}`
+              : "No weekly company budget"
+          }
           icon={CalendarDays}
         >
           {weekBudget ? (
@@ -111,11 +119,11 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
           ) : null}
         </KpiCard>
         <KpiCard
-          label="This month"
+          label="Credits this month"
           value={credits(data.monthCredits)}
           sub={
             monthBudget
-              ? `of ${credits(monthBudget.limitCredits)} · ${percent(data.monthCredits / monthBudget.limitCredits)}`
+              ? `of ${credits(monthBudget.limitCredits)} monthly budget · ${percent(data.monthCredits / monthBudget.limitCredits)}`
               : "No monthly company budget"
           }
           icon={Wallet}
@@ -143,7 +151,7 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
       <Card>
         <CardHeader
           title="Daily spend"
-          description={`${credits(rangeTotal)} credits over the last ${days} days · avg ${credits(rangeTotal / Math.max(1, daily.length))}/day`}
+          description={`${credits(rangeTotal)} credits over the last ${days} days · average ${credits(rangeTotal / Math.max(1, daily.length))} a day`}
           icon={BarChart3}
         />
         <CardContent className="pt-6">
@@ -160,7 +168,7 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Breakdown
           title="By agent"
           icon={Users}
@@ -246,7 +254,7 @@ function Breakdown({ title, icon, rows }: { title: string; icon: typeof Users; r
                     {percent(total > 0 ? row.credits / total : 0)}
                   </span>
                 </div>
-                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.06]" aria-hidden>
+                <div className="meter-track mt-1.5 h-1 overflow-hidden rounded-full" aria-hidden>
                   <div
                     className="h-full rounded-full"
                     style={{

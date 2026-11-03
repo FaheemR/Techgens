@@ -277,7 +277,7 @@ export function AzureSetupView({ setup, fileName }: { setup: AzureSetupDTO; file
           {environments.map(([environment, variables]) => (
             <div key={environment} className="overflow-hidden rounded-md border border-border">
               <div className="flex items-center gap-2 border-b border-border bg-surface-2 px-3 py-1.5">
-                <Badge tone={environment.toLowerCase().startsWith("prod") ? "danger" : "warning"}>
+                <Badge tone={environment.toLowerCase().startsWith("prod") ? "info" : "neutral"}>
                   {environment}
                 </Badge>
                 <span className="text-xs text-subtle">

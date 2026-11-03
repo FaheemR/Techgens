@@ -22,15 +22,23 @@ export function CardHeader({
   as?: "h2" | "h3";
 }) {
   return (
-    <div className={cn("flex items-start justify-between gap-3 border-b border-border px-4 py-3", className)}>
-      <div className="flex min-w-0 items-start gap-2.5">
+    <div
+      className={cn(
+        // Wraps the actions below the title when the card is too narrow for both (WCAG 1.4.10 reflow).
+        "flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 flex-[1_1_12rem] items-start gap-2.5">
         {Icon ? <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-accent" /> : null}
         <div className="min-w-0">
           <Heading className="truncate text-sm font-semibold text-fg">{title}</Heading>
           {description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
         </div>
       </div>
-      {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+      {action ? (
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">{action}</div>
+      ) : null}
     </div>
   );
 }

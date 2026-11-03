@@ -40,7 +40,7 @@ export function Progress({
       aria-valuemax={100}
       aria-valuenow={pct}
       className={cn(
-        "w-full overflow-hidden rounded-full bg-white/[0.07]",
+        "meter-track w-full overflow-hidden rounded-full",
         size === "xs" ? "h-1" : size === "sm" ? "h-1.5" : "h-2",
         className,
       )}

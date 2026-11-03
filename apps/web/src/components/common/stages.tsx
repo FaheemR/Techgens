@@ -51,7 +51,7 @@ export function StageBar({
               state === "done" && "bg-accent/60",
               state === "active" &&
                 (waitingOnCeo ? "bg-amber-400" : status === "paused" ? "bg-amber-400/70" : "bg-accent"),
-              state === "pending" && "bg-white/10",
+              state === "pending" && "meter-track",
             )}
           />
         );

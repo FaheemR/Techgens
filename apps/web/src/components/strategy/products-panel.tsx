@@ -51,7 +51,7 @@ export function ProductsPanel() {
       <QueryView
         query={products}
         loading={
-          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {Array.from({ length: 3 }, (_, i) => (
               <Skeleton key={i} className="h-40 rounded-xl" />
             ))}
@@ -74,7 +74,7 @@ export function ProductsPanel() {
               />
             </Card>
           ) : (
-            <ul className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {list.map((product) => (
                 <li key={product.id}>
                   <button

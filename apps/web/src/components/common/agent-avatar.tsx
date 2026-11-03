@@ -17,8 +17,8 @@ export function AgentAvatar({
 }) {
   const style = departmentStyle(department);
   const sizes = {
-    xs: "size-5 text-[9px]",
-    sm: "size-6 text-[10px]",
+    xs: "size-5 text-[11px] tracking-tighter",
+    sm: "size-6 text-[11px]",
     md: "size-8 text-xs",
     lg: "size-11 text-sm",
   } as const;

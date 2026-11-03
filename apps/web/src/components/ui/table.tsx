@@ -2,8 +2,10 @@ import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
+  // `relative` keeps absolutely positioned descendants (e.g. sr-only labels) inside the scroll area; without it they
+  // escape the overflow clip and widen the page on narrow screens.
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="relative w-full overflow-x-auto">
       <table className={cn("w-full border-collapse text-left text-sm", className)} {...props} />
     </div>
   );

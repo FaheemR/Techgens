@@ -5,14 +5,30 @@
   --color-surface: #0c121c;
   --color-surface-2: #111a27;
   --color-surface-3: #172233;
+  /* Card, column and divider borders are decorative, so they stay subtle. */
   --color-border: #1e2a3b;
   --color-border-strong: #2c3d55;
+  /* Boundaries that identify a control or a measure — input/select/textarea borders, switch tracks and the empty part
+     of progress & stage bars — need ≥ 3:1 against the page, cards and field fills (WCAG 1.4.11): #5a6c87 is ~3.5:1. */
+  --color-control: #5a6c87;
   --color-fg: #e5edf7;
   --color-muted: #9aa8bc;
   --color-subtle: #7d8ca3;
   --color-accent: #22d3ee;
   --color-accent-strong: #06b6d4;
   --color-accent-fg: #03141a;
+  /* Solid destructive fill (danger buttons, notification count): white text on it is 4.7:1 (rose-500 is only 3.75:1). */
+  --color-danger: #e11d48;
+  --color-danger-strong: #be123c;
+  /*
+   * Semantic colour rules (tones live in lib/labels.ts; keep one meaning per colour):
+   * - rose: errors, failures and destructive actions only — never neutral facts such as the production environment.
+   * - amber: needs attention — waiting on the CEO, warnings, budgets past their warn threshold.
+   * - emerald: success, healthy, done.
+   * - cyan (accent): primary actions, live and in-progress work.
+   * - sky / slate: informational labels such as environments, kinds and counts.
+   * - violet: proposals and gates awaiting a lifecycle decision.
+   */
 
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif,
@@ -23,6 +39,22 @@
   --animate-fade-in: fade-in 160ms ease-out;
   --animate-slide-in: slide-in 200ms ease-out;
   --animate-flash: flash 1.2s ease-out;
+  /* Attention pings/pulses stop after a few seconds so nothing keeps moving next to content (WCAG 2.2.2). */
+  --animate-ping-brief: ping 1s cubic-bezier(0, 0, 0.2, 1) 4;
+  --animate-pulse-brief: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) 2;
+
+  @keyframes ping {
+    75%,
+    100% {
+      transform: scale(2);
+      opacity: 0;
+    }
+  }
+  @keyframes pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
 
   @keyframes blink {
     to {
@@ -102,6 +134,25 @@
   background-size: 32px 32px;
 }
 
+/* Empty part of progress and stage bars: a dark fill keeps the coloured value prominent, the ≥ 3:1 inset outline
+   shows the full extent of the bar (WCAG 1.4.11). */
+@utility meter-track {
+  background-color: rgb(255 255 255 / 0.04);
+  box-shadow: inset 0 0 0 1px var(--color-control);
+}
+
+/* Honour "reduce motion": no pulsing, pinging, blinking, sliding or fading (loading spinners keep turning). */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.animate-spin),
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Rendered Markdown (PRDs, specs, summaries, chat replies). */
 .markdown {
   color: var(--color-fg);
@@ -115,6 +166,7 @@
   & > :last-child {
     margin-bottom: 0;
   }
+  /* Headings are styled by their authored level (md-hN) — MarkdownView may shift the element level to fit the page. */
   & h1,
   & h2,
   & h3,
@@ -126,22 +178,22 @@
     line-height: 1.3;
     margin: 1.5em 0 0.6em;
   }
-  & h1 {
+  & .md-h1 {
     font-size: 1.5rem;
     padding-bottom: 0.35em;
     border-bottom: 1px solid var(--color-border);
   }
-  & h2 {
+  & .md-h2 {
     font-size: 1.25rem;
     padding-bottom: 0.3em;
     border-bottom: 1px solid var(--color-border);
   }
-  & h3 {
+  & .md-h3 {
     font-size: 1.075rem;
   }
-  & h4,
-  & h5,
-  & h6 {
+  & .md-h4,
+  & .md-h5,
+  & .md-h6 {
     font-size: 0.95rem;
     color: var(--color-muted);
   }
@@ -259,9 +311,9 @@
   font-size: 0.875rem;
   line-height: 1.55;
 
-  & h1,
-  & h2,
-  & h3 {
+  & .md-h1,
+  & .md-h2,
+  & .md-h3 {
     font-size: 0.95rem;
     border: 0;
     padding: 0;

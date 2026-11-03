@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
+import { LiveAnnouncer } from "./live-region";
 
 interface ModalProps {
   open: boolean;
@@ -75,6 +76,8 @@ export function Dialog({
     >
       {open ? (
         <div className="flex max-h-[85dvh] animate-fade-in flex-col">
+          {/* The page's live regions are inert while this modal is open. */}
+          <LiveAnnouncer />
           <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div className="min-w-0">
               <h2 id={titleId} className="text-base font-semibold text-fg">
@@ -144,6 +147,7 @@ export function Sheet({
     >
       {open ? (
         <div className={cn("flex h-full flex-col", side === "right" && "animate-slide-in")}>
+          <LiveAnnouncer />
           <div className="border-b border-border px-5 py-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">

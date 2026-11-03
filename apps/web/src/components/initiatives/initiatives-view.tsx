@@ -119,7 +119,7 @@ export function InitiativesView() {
       <QueryView
         query={query}
         loading={
-          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {Array.from({ length: 6 }, (_, i) => (
               <Skeleton key={i} className="h-48 rounded-xl" />
             ))}
@@ -155,7 +155,12 @@ export function InitiativesView() {
               />
             </Card>
           ) : (
-            <ul className={cn("grid gap-4 md:grid-cols-2 2xl:grid-cols-3", query.isFetching && "opacity-80")}>
+            <ul
+              className={cn(
+                "grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3",
+                query.isFetching && "opacity-80",
+              )}
+            >
               {filtered.map((initiative) => (
                 <li key={initiative.id}>
                   <InitiativeCard initiative={initiative} />

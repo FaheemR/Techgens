@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { LiveEvent } from "@techgens/core";
+import { nanoToCredits } from "@techgens/core";
 import {
   Activity,
   Ban,
@@ -32,11 +33,11 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { eventString } from "@/lib/events";
-import { relativeTime, formatDateTime } from "@/lib/format";
+import { credits, relativeTime, formatDateTime } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { TONE_BADGE, type Tone } from "@/lib/labels";
 import { useOrg } from "@/lib/queries";
-import { cn } from "@/lib/utils";
+import { asNumber, cn } from "@/lib/utils";
 
 export function eventMeta(type: string): { icon: LucideIcon; tone: Tone } {
   switch (type) {
@@ -92,6 +93,17 @@ export function eventMeta(type: string): { icon: LucideIcon; tone: Tone } {
       if (type.startsWith("github.")) return { icon: GitPullRequest, tone: "neutral" };
       return { icon: Activity, tone: "neutral" };
   }
+}
+
+/** One-line summary; spend events are re-worded with the shared credits format ("< 0.01 credits on …"). */
+export function eventSummary(event: LiveEvent): string {
+  if (event.type === "usage.recorded") {
+    const nano = asNumber(event.data.nanoAiu);
+    const value = asNumber(event.data.credits) ?? (nano === undefined ? undefined : nanoToCredits(nano));
+    const model = eventString(event, "model");
+    if (value !== undefined) return `${credits(value)} credits${model ? ` on ${model}` : ""}`;
+  }
+  return event.summary || event.type;
 }
 
 /** Deep link for an event's subject, when the Command Center has a page for it. */
@@ -177,7 +189,7 @@ export function ActivityFeed({
               <Icon aria-hidden className="size-3.5" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="line-clamp-2 text-sm text-fg">{event.summary || event.type}</p>
+              <p className="line-clamp-2 text-sm text-fg">{eventSummary(event)}</p>
               <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-subtle">
                 <span className="text-muted">{actor}</span>
                 <span aria-hidden>·</span>

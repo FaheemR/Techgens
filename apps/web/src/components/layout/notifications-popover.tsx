@@ -89,7 +89,8 @@ export function NotificationsPopover() {
           <CountBadge
             count={unread}
             tone="danger"
-            className="absolute -right-0.5 -top-0.5 h-4 min-w-4 px-1 text-[10px]"
+            max={9}
+            className="absolute -right-0.5 -top-0.5 h-4 min-w-4 px-1 text-[11px] leading-none"
           />
         ) : null}
       </Button>

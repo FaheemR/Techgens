@@ -12,6 +12,7 @@ import {
 } from "react";
 import { CircleAlert, CircleCheck, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LiveAnnouncer, announce } from "./live-region";
 
 type ToastVariant = "success" | "error" | "info";
 
@@ -68,6 +69,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     ({ title, description, variant = "info", durationMs }) => {
       const id = nextId.current++;
       setToasts((list) => [...list.slice(-4), { id, title, description, variant }]);
+      announce(
+        description ? `${title}. ${description}` : title,
+        variant === "error" ? "assertive" : "polite",
+      );
       window.setTimeout(() => dismiss(id), durationMs ?? (variant === "error" ? 8_000 : 4_500));
     },
     [dismiss],
@@ -89,6 +94,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
+      {/* Screen readers hear toasts through these persistent regions; the popover below is visual only. */}
+      <LiveAnnouncer />
       <section
         ref={regionRef}
         popover="manual"
@@ -101,7 +108,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           return (
             <div
               key={t.id}
-              role={t.variant === "error" ? "alert" : "status"}
               className={cn(
                 "pointer-events-auto flex animate-fade-in items-start gap-3 rounded-lg border bg-[#0f1724]/95 px-3.5 py-3 shadow-xl shadow-black/50 backdrop-blur",
                 STYLES[t.variant],

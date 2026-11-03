@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 /** Current time, refreshed on an interval (for relative timestamps). */
@@ -20,6 +20,42 @@ export function useDebounced<T>(value: T, delayMs = 300): T {
     return () => window.clearTimeout(id);
   }, [value, delayMs]);
   return debounced;
+}
+
+/** Whether a CSS media query matches (re-renders on change). `serverValue` is used for the server render. */
+export function useMediaQuery(query: string, serverValue = false): boolean {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const list = window.matchMedia(query);
+      list.addEventListener("change", onChange);
+      return () => list.removeEventListener("change", onChange);
+    },
+    [query],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+    () => serverValue,
+  );
+}
+
+/**
+ * Sets the browser tab title from loaded data, e.g. "InvoiceLite MVP · Initiatives · Techgens" (the route's static
+ * metadata title applies until then). Nothing happens while `title` is empty.
+ */
+export function useDocumentTitle(title: string | null | undefined): void {
+  useEffect(() => {
+    if (!title) return;
+    const path = window.location.pathname;
+    const apply = () => {
+      if (window.location.pathname === path && document.title !== title) document.title = title;
+    };
+    apply();
+    // Next can re-render the route's static <title> after hydration; keep ours while this page is shown.
+    const observer = new MutationObserver(apply);
+    observer.observe(document.head, { subtree: true, childList: true, characterData: true });
+    return () => observer.disconnect();
+  }, [title]);
 }
 
 /**
