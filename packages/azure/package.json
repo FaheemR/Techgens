@@ -11,5 +11,8 @@
   },
   "dependencies": {
     "@techgens/core": "workspace:*"
+  },
+  "devDependencies": {
+    "yaml": "^2.8.0"
   }
 }
