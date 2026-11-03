@@ -27,10 +27,10 @@ Response types live in `packages/core/src/api.ts` (`*DTO`). Errors: non-2xx with
 ## Initiatives
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET | `/api/initiatives?status=` | — | `InitiativeSummaryDTO[]` |
+| GET | `/api/initiatives?status=` | — | `InitiativeSummaryDTO[]` (`statusReason` explains paused/cancelled initiatives, e.g. "Rejected at Vision & roadmap: …"; `workItems` counts every item listed by `/api/work-items?initiativeId=`, stage items included) |
 | POST | `/api/initiatives` | `{ title, directive, productId?, targetDate?, budgetCredits? }` | `InitiativeDetailDTO` (starts intake with the Chief of Staff) |
 | GET / PATCH | `/api/initiatives/:id` | `{ title?, summary?, targetDate?, budgetCredits? }` | `InitiativeDetailDTO` |
-| POST | `/api/initiatives/:id/pause` · `/resume` · `/cancel` | — | `InitiativeDetailDTO` |
+| POST | `/api/initiatives/:id/pause` · `/resume` · `/cancel` | — | `InitiativeDetailDTO`. Pause sets `statusReason` "Paused by the CEO"; resume clears it and restarts a rejected stage with the CEO's comment; cancel ("Cancelled by the CEO") withdraws open approvals (status `cancelled`, `decisionComment` "Withdrawn — the initiative was cancelled."). Resuming or cancelling a finished initiative → `409` |
 
 ## Directives chat (CEO ↔ Chief of Staff)
 | Method | Path | Body | Response |
@@ -65,13 +65,25 @@ Response types live in `packages/core/src/api.ts` (`*DTO`). Errors: non-2xx with
 |---|---|---|---|
 | GET | `/api/approvals?status=pending` | — | `ApprovalSummaryDTO[]` |
 | GET | `/api/approvals/:id` | — | `ApprovalDetailDTO` |
-| POST | `/api/approvals/:id/decide` | `DecideApprovalRequest` | `ApprovalDetailDTO` |
+| POST | `/api/approvals/:id/decide` | `DecideApprovalRequest` | `ApprovalDetailDTO` (`409` if no longer pending). Rejecting a stage gate pauses its initiative. Approving a budget overrun without `extraCredits` grants `payload.suggestedExtraCredits`; `decisionComment` states the grant ("Granted 10 extra credits for today (until 2026-11-04 00:00 UTC).") |
+
+Every decision, auto-approval or withdrawal marks the approval's notifications read and emits `approval.decided`
+(`data.outcome`: `approved` · `rejected` · `changes_requested` · `withdrawn`).
+
+**Payload keys** (`ApprovalDetailDTO.payload`; typed in `packages/core/src/api.ts`, raw ids end in `Id`/`Ids`):
+* `merge_to_main` — `MergeToMainPayload`: `prNumber`, `prUrl`, `prTitle`, `checks: [{ name, conclusion }]`,
+  `filesChanged`, `additions`, `deletions`, `commitSha`, `releaseNotes` (markdown excerpt), `releaseNotesDocumentId`,
+  `changes` (PR titles). The release notes and test plan are attached as `documents`.
+* `prod_deploy` — `ProdDeployPayload`: `environment`, `runId`, `runUrl`, `commitSha`, `version?`, `stagingVerified`,
+  `stagingEvidence`, `rollback`, `changes`, `releasePrNumber`, `releasePrUrl`.
+* `budget_overrun` — `BudgetOverrunPayload`: `scope`, `scopeName`, `period`, `limitCredits` (base), `grantedCredits`,
+  `spentCredits`, `windowEndsAt`, `suggestedExtraCredits`, `grantedExtraCredits` (after approval), `budgetId`, `jobIds`.
 
 ## Budget & usage
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/usage/summary?days=30` | — | `UsageSummaryDTO` |
-| GET / PUT | `/api/budgets` | `Array<{ scope, scopeId, period, limitCredits, warnPct?, enabled? }>` (upsert) | `BudgetDTO[]` |
+| GET / PUT | `/api/budgets` | `Array<{ scope, scopeId, period, limitCredits, warnPct?, enabled? }>` (upsert) | `BudgetDTO[]` (`limitCredits` is the base limit; `grantedCredits` = extra credits granted for the current window, which ends at `windowEndsAt`; `state` uses both) |
 | DELETE | `/api/budgets/:id` | — | `204` |
 
 ## Operations
@@ -90,7 +102,7 @@ Response types live in `packages/core/src/api.ts` (`*DTO`). Errors: non-2xx with
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/settings` | — | `SettingsDTO` |
-| PUT | `/api/settings` | `Partial<Omit<SettingsDTO,"github">>` (+ `mcpServers` entries may include `env`) | `SettingsDTO` |
+| PUT | `/api/settings` | `Partial<Omit<SettingsDTO,"github">>` (+ `mcpServers` entries may include `env`) | `SettingsDTO`. Each gate switched on/off is recorded as a CEO decision (`/api/decisions`, `initiativeId: null`) and a `decision.recorded` event (`subjectType: "settings"`, `data: { gate, enabled }`), e.g. "CEO turned off the Production deploy gate" |
 | GET | `/api/settings/models` | — | `ModelOptionDTO[]` |
 | POST | `/api/settings/github/token` | `{ token }` (fine-grained PAT) | `SettingsDTO` |
 | DELETE | `/api/settings/github` | — | `SettingsDTO` |

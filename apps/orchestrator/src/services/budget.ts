@@ -3,6 +3,7 @@ import {
   creditsToNano,
   evaluateBudget,
   nanoToCredits,
+  periodEnd,
   periodStart,
   type BudgetDTO,
   type BudgetPeriod,
@@ -28,6 +29,19 @@ export interface UsageInput {
 }
 
 const l = schema.usageLedger;
+
+/** Credits for people: "10", "0.5", "0.0035". */
+export function fmtCredits(credits: number): string {
+  return Math.abs(credits) >= 0.01 || credits === 0 ? String(Number(credits.toFixed(2))) : credits.toPrecision(2);
+}
+
+const WINDOW_NAMES: Record<BudgetPeriod, string> = { day: "today", week: "this week", month: "this month", total: "the total budget" };
+
+/** "for today (until 2026-11-04 00:00 UTC)" / "on top of the total budget": how long a grant on a budget lasts. */
+export function grantWindow(period: BudgetPeriod, windowEndsAt: Date | string | null): string {
+  if (period === "total" || !windowEndsAt) return "on top of the total budget";
+  return `for ${WINDOW_NAMES[period]} (until ${new Date(windowEndsAt).toISOString().slice(0, 16).replace("T", " ")} UTC)`;
+}
 
 export class BudgetService {
   constructor(private readonly app: Techgens) {}
@@ -99,23 +113,40 @@ export class BudgetService {
     return rows.reduce((s, r) => s + r.extra, 0);
   }
 
-  async evaluate(b: Budget, labels?: Map<string, string>): Promise<BudgetDTO> {
-    const start = periodStart(b.period);
+  /** Spend of the budget's current window. Grants by the CEO only extend the current window (they expire with it). */
+  async evaluate(b: Budget, labels?: Map<string, string>, now: Date = new Date()): Promise<BudgetDTO> {
+    const start = periodStart(b.period, now);
     const spent = await this.spentNano(b.scope, b.scopeId, start);
-    const limit = b.limitCredits + (await this.extraCredits(b.id, start));
-    const ev = evaluateBudget(spent, limit, b.warnPct);
+    const granted = await this.extraCredits(b.id, start);
+    const ev = evaluateBudget(spent, b.limitCredits + granted, b.warnPct);
     return {
       id: b.id,
       scope: b.scope,
       scopeId: b.scopeId,
       scopeLabel: labels?.get(`${b.scope}:${b.scopeId}`) ?? (b.scope === "company" ? "Company" : (b.scopeId ?? b.scope)),
       period: b.period,
-      limitCredits: limit,
+      limitCredits: b.limitCredits,
+      grantedCredits: granted,
+      windowEndsAt: periodEnd(b.period, now)?.toISOString() ?? null,
       warnPct: b.warnPct,
       enabled: b.enabled,
       spentCredits: ev.spentCredits,
       state: b.enabled ? ev.state : "ok",
     };
+  }
+
+  /** Human name of a budget's scope: "Company", an initiative title, "Morgan (Chief of Staff)", … */
+  async scopeName(scope: BudgetScope, scopeId: string | null): Promise<string> {
+    if (scope === "company" || !scopeId) return "Company";
+    if (scope === "department") return `${scopeId.charAt(0).toUpperCase()}${scopeId.slice(1)} department`;
+    return (await this.labels()).get(`${scope}:${scopeId}`) ?? scopeId;
+  }
+
+  /** Decision note for a grant on `budgetId`, e.g. "Granted 10 extra credits for today (until 2026-11-04 00:00 UTC)." */
+  async describeGrant(budgetId: string | null, credits: number, now: Date = new Date()): Promise<string> {
+    const [b] = budgetId ? await this.app.db.select().from(schema.budgets).where(eq(schema.budgets.id, budgetId)) : [];
+    const amount = `${fmtCredits(credits)} extra credit${credits === 1 ? "" : "s"}`;
+    return b ? `Granted ${amount} ${grantWindow(b.period, periodEnd(b.period, now))}.` : `Granted ${amount}.`;
   }
 
   /** Budgets that constrain a job of `agent` (company, department, agent, initiative, product). */
@@ -141,14 +172,14 @@ export class BudgetService {
           .onConflictDoNothing()
           .returning();
         if (inserted.length) {
-          await this.app.bus.emit({ type: "budget.warning", subjectType: "budget", subjectId: b.id, summary: `${b.scope} budget at ${Math.round((dto.spentCredits / dto.limitCredits) * 100)}% (${b.period})`, data: { ...dto } });
+          await this.app.bus.emit({ type: "budget.warning", subjectType: "budget", subjectId: b.id, summary: `${b.scope} budget at ${Math.round((dto.spentCredits / (dto.limitCredits + dto.grantedCredits)) * 100)}% (${b.period})`, data: { ...dto } });
         }
       }
     }
     return null;
   }
 
-  /** CEO granted extra credits for the current window of a budget. */
+  /** CEO granted extra credits for the current window of a budget (the base limit is unchanged; the grant expires with the window). */
   async grantExtra(budgetId: string, credits: number): Promise<void> {
     const [b] = await this.app.db.select().from(schema.budgets).where(eq(schema.budgets.id, budgetId));
     if (!b) return;
@@ -178,12 +209,12 @@ export class BudgetService {
 
   private async labels(): Promise<Map<string, string>> {
     const [agents, initiatives, products] = await Promise.all([
-      this.app.db.select({ id: schema.agents.id, name: schema.agents.name, roleId: schema.agents.roleId }).from(schema.agents),
+      this.app.db.select({ id: schema.agents.id, name: schema.agents.name, role: schema.roles.title }).from(schema.agents).innerJoin(schema.roles, eq(schema.agents.roleId, schema.roles.id)),
       this.app.db.select({ id: schema.initiatives.id, title: schema.initiatives.title }).from(schema.initiatives),
       this.app.db.select({ id: schema.products.id, name: schema.products.name }).from(schema.products),
     ]);
     const m = new Map<string, string>();
-    for (const a of agents) m.set(`agent:${a.id}`, `${a.name} (${a.roleId})`);
+    for (const a of agents) m.set(`agent:${a.id}`, `${a.name} (${a.role})`);
     for (const i of initiatives) m.set(`initiative:${i.id}`, i.title);
     for (const p of products) m.set(`product:${p.id}`, p.name);
     return m;

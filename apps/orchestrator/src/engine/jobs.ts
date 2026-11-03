@@ -2,16 +2,19 @@ import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import {
   DomainError,
   TERMINAL_JOB_STATUSES,
+  gatedStage,
   nanoToCredits,
   truncate,
   type ApprovalOutcome,
   type BudgetDTO,
+  type BudgetOverrunPayload,
   type JobDTO,
   type JobStatus,
 } from "@techgens/core";
 import { schema, type Agent, type Approval, type Job, type JobResult, type Role } from "@techgens/db";
 import { RuntimeUnavailableError } from "@techgens/runtime";
 import type { Techgens } from "../app";
+import { fmtCredits, grantWindow } from "../services/budget";
 import { runJobTurns } from "./runner";
 
 export interface JobDispatcher {
@@ -175,17 +178,32 @@ export class JobEngine {
     let approval: Approval | undefined = pending;
     if (pending) {
       const jobIds = [...new Set([...((pending.payload.jobIds as string[]) ?? []), job.id])];
-      await this.app.db.update(schema.approvals).set({ payload: { ...pending.payload, jobIds } }).where(eq(schema.approvals.id, pending.id));
+      await this.app.db.update(schema.approvals).set({ payload: { ...pending.payload, jobIds, spentCredits: budget.spentCredits } }).where(eq(schema.approvals.id, pending.id));
     } else {
-      await this.app.bus.emit({ type: "budget.exceeded", subjectType: "budget", subjectId: budget.id, summary: `${budget.scopeLabel} ${budget.period} budget exceeded`, data: { ...budget } });
-      const suggested = Math.max(10, Math.round(budget.limitCredits * 0.5));
+      const scopeName = await this.app.budget.scopeName(budget.scope, budget.scopeId);
+      await this.app.bus.emit({ type: "budget.exceeded", subjectType: "budget", subjectId: budget.id, summary: `${scopeName} ${budget.period} budget exceeded`, data: { ...budget, scopeLabel: scopeName } });
+      const limit = budget.limitCredits + budget.grantedCredits;
+      const suggested = Math.max(10, Math.round(limit * 0.5));
+      const payload: BudgetOverrunPayload = {
+        budgetId: budget.id,
+        jobIds: [job.id],
+        scope: budget.scope,
+        scopeName,
+        period: budget.period,
+        limitCredits: budget.limitCredits,
+        grantedCredits: budget.grantedCredits,
+        spentCredits: budget.spentCredits,
+        windowEndsAt: budget.windowEndsAt,
+        suggestedExtraCredits: suggested,
+      };
       approval = (
         await this.app.approvals.request({
           kind: "budget_overrun",
-          title: `${budget.scopeLabel}: ${budget.period} budget exceeded`,
-          summary: `Spent ${budget.spentCredits.toFixed(2)} of ${budget.limitCredits} AI credits (${budget.scope} · ${budget.period}). Work is paused until you grant extra credits for this window (suggested: ${suggested}).`,
-          initiativeId: job.initiativeId,
-          payload: { budgetId: budget.id, jobIds: [job.id], suggestedExtraCredits: suggested },
+          title: `${scopeName}: ${budget.period} budget exceeded`,
+          summary: `Spent ${fmtCredits(budget.spentCredits)} of ${fmtCredits(limit)} AI credits (${budget.scope} · ${budget.period}${budget.grantedCredits ? `, incl. ${fmtCredits(budget.grantedCredits)} already granted` : ""}). Work is paused until you grant extra credits ${grantWindow(budget.period, budget.windowEndsAt)}; suggested: ${suggested}.`,
+          // Only an initiative's own budget belongs to that initiative; company/agent/department overruns block any job.
+          initiativeId: budget.scope === "initiative" ? budget.scopeId : null,
+          payload: { ...payload },
         })
       ).approval;
     }
@@ -226,7 +244,7 @@ export class JobEngine {
     const item = done.workItemId ? await this.app.work.get(done.workItemId).catch(() => null) : null;
     if (item && item.kind !== "stage" && done.kind !== "chat") {
       const blocked = status !== "succeeded" || result?.outcome === "blocked";
-      await this.app.work.update(item.id, { status: blocked ? "blocked" : "done", result: { summary: result?.summary ?? error ?? "" } });
+      await this.app.work.update(item.id, { status: status === "cancelled" ? "cancelled" : blocked ? "blocked" : "done", result: { summary: result?.summary ?? error ?? "" } });
     }
     if (done.kind === "chat" && done.threadId) {
       await this.app.chat.postAgentReply(done.threadId, done.agentId, result?.summary || error || "(no reply)", done.id);
@@ -255,6 +273,8 @@ export class JobEngine {
   }
 
   async onApprovalDecided(approval: Approval, outcome: ApprovalOutcome, comment: string, note: string): Promise<void> {
+    // A rejected stage gate pauses its initiative and stops the stage's jobs (LifecycleService.onApprovalDecided).
+    if (outcome === "rejected" && approval.initiativeId && gatedStage(approval.kind, approval.payload)) return;
     const waiting = await this.app.db
       .select()
       .from(schema.jobs)

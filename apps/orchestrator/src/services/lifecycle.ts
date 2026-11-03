@@ -1,8 +1,10 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   DomainError,
+  GATE_LABELS,
   LIFECYCLE_STAGES,
   STAGES,
+  gatedStage,
   nextStage,
   stageIndex,
   type ApprovalOutcome,
@@ -21,7 +23,13 @@ export interface CreateInitiativeInput {
   directive: string;
   summary?: string;
   productId?: string | null;
+  /** Existing product to attach (matched by name) or new product to create. */
   productName?: string;
+  /**
+   * Without `productId`/`productName`, create a product named after the title (default, e.g. the CEO's form). Agents pass
+   * false: they only attach a product when the directive implies one (otherwise the repository stages are skipped).
+   */
+  createProduct?: boolean;
   targetDate?: string | null;
   budgetCredits?: number | null;
   skipStages?: LifecycleStage[];
@@ -39,7 +47,7 @@ export class LifecycleService {
 
   async create(input: CreateInitiativeInput): Promise<Initiative> {
     let productId = input.productId ?? null;
-    if (!productId) {
+    if (!productId && (input.productName?.trim() || input.createProduct !== false)) {
       const name = input.productName?.trim() || input.title;
       const product = (await this.app.company.findProductByName(name)) ?? (await this.app.company.createProduct({ name, description: input.summary ?? input.directive }));
       productId = product.id;
@@ -84,11 +92,16 @@ export class LifecycleService {
     return row ?? null;
   }
 
-  async startStage(ini: Initiative, stage: LifecycleStage, feedback?: string): Promise<Job | null> {
+  /** Starts (or, with `restart`, re-runs) a stage: one stage work item per stage and a job for its owner. */
+  async startStage(ini: Initiative, stage: LifecycleStage, feedback?: string, options: { restart?: boolean } = {}): Promise<Job | null> {
     const def = STAGES[stage];
     const product = ini.productId ? await this.app.company.getProduct(ini.productId) : null;
     await this.app.db.update(schema.initiatives).set({ stage, updatedAt: new Date() }).where(eq(schema.initiatives.id, ini.id));
-    await this.app.bus.emit({ type: "initiative.stage_changed", subjectType: "initiative", subjectId: ini.id, summary: `${ini.title} → ${def.title}`, data: { stage } });
+    if (options.restart) {
+      await this.app.bus.emit({ type: "initiative.updated", subjectType: "initiative", subjectId: ini.id, summary: `${ini.title}: ${def.title} restarted`, data: { stage } });
+    } else {
+      await this.app.bus.emit({ type: "initiative.stage_changed", subjectType: "initiative", subjectId: ini.id, summary: `${ini.title} → ${def.title}`, data: { stage } });
+    }
 
     if (def.requiresRepo && product && !product.repoOwner) {
       try {
@@ -100,17 +113,22 @@ export class LifecycleService {
     }
     const owner = (await this.app.org.agentForRole(def.ownerRole)) ?? (await this.app.org.agentForRole("chief-of-staff"));
     if (!owner) throw new DomainError(`no agent available for ${def.ownerRole}`, "unavailable");
-    const item = await this.app.work.create({
-      kind: "stage",
-      stage,
-      title: def.title,
-      description: def.instructions,
-      initiativeId: ini.id,
-      productId: ini.productId,
-      assigneeAgentId: owner.id,
-      status: "in_progress",
-      priority: "p1",
-    });
+    // A re-run (resume, rejected gate) continues the stage's existing work item instead of listing the stage twice.
+    const existing = await this.stageWorkItem(ini.id, stage);
+    const item =
+      existing && existing.status !== "done"
+        ? await this.app.work.update(existing.id, { status: "in_progress", assigneeAgentId: owner.id, completedAt: null })
+        : await this.app.work.create({
+            kind: "stage",
+            stage,
+            title: def.title,
+            description: def.instructions,
+            initiativeId: ini.id,
+            productId: ini.productId,
+            assigneeAgentId: owner.id,
+            status: "in_progress",
+            priority: "p1",
+          });
     const fresh = await this.get(ini.id);
     const prompt = stageBrief({
       initiative: fresh,
@@ -145,6 +163,7 @@ export class LifecycleService {
     }
     const kinds = STAGES[item.stage].deliverables;
     const docs = (await this.app.docs.list({ initiativeId: ini.id })).filter((d) => kinds.includes(d.kind as never));
+    const evidence = await this.app.delivery.gateEvidence(gate, ini, {});
     await this.app.approvals.request({
       kind: gate,
       title: `${STAGES[item.stage].title} — ${ini.title}`,
@@ -152,16 +171,17 @@ export class LifecycleService {
       initiativeId: ini.id,
       workItemId: item.id,
       jobId: job.id,
-      documentIds: docs.map((d) => d.id),
+      documentIds: [...new Set([...docs.map((d) => d.id), ...evidence.documentIds])],
       requestedByAgentId: job.agentId,
-      payload: { stage: item.stage, ...(gate === "merge_to_main" && ini.metadata.releasePrNumber ? { prNumber: ini.metadata.releasePrNumber } : {}) },
+      payload: { stage: item.stage, ...evidence.payload },
     });
   }
 
-  /** Gate decisions on approvals whose requesting job is no longer waiting (engine-created gates). */
+  /** Stage-gate decisions: rejections pause the initiative; other outcomes of engine-created gates move the stage on. */
   async onApprovalDecided(a: Approval, outcome: ApprovalOutcome, comment: string): Promise<void> {
-    const stage = a.payload.stage as LifecycleStage | undefined;
-    if (!a.initiativeId || !stage || STAGES[stage]?.gate !== a.kind) return;
+    const stage = gatedStage(a.kind, a.payload);
+    if (!a.initiativeId || !stage) return;
+    if (outcome === "rejected") return this.onGateRejected(a, stage, comment);
     if (a.jobId) {
       const job = await this.app.engine.getJob(a.jobId);
       if (job.status === "waiting" || job.status === "queued" || job.status === "running") return; // engine resumes the job
@@ -169,11 +189,28 @@ export class LifecycleService {
     const ini = await this.get(a.initiativeId);
     if (ini.stage !== stage || ini.status !== "active") return;
     if (outcome === "approved") return this.advance(ini.id);
-    if (outcome === "rejected") {
-      await this.pause(ini.id, `CEO rejected ${STAGES[stage].title}: ${comment}`);
-      return;
-    }
     if (a.jobId) await this.app.engine.reopenJob(a.jobId, `The CEO requested changes before approving "${a.title}":\n\n${comment}\n\nRevise your deliverables, then call complete_task (the gate will be requested again).`);
+  }
+
+  /**
+   * The CEO rejected a stage gate: the initiative is paused with the reason (no zombie "active" initiative) and the work
+   * that produced the proposal stops. Resuming restarts the stage with the CEO's feedback (see `resume`).
+   */
+  private async onGateRejected(a: Approval, stage: LifecycleStage, comment: string): Promise<void> {
+    const ini = await this.get(a.initiativeId!);
+    const live = ini.stage === stage && (ini.status === "active" || ini.status === "paused");
+    if (live) await this.pause(ini.id, `Rejected at ${GATE_LABELS[a.kind]}: ${comment}`, { rejectedApprovalId: a.id, force: true });
+    const item = await this.stageWorkItem(ini.id, stage);
+    const owners = [item ? eq(schema.jobs.workItemId, item.id) : undefined, a.jobId ? eq(schema.jobs.id, a.jobId) : undefined].filter((c) => c !== undefined);
+    if (owners.length) {
+      const open = await this.app.db
+        .select({ id: schema.jobs.id })
+        .from(schema.jobs)
+        .where(and(inArray(schema.jobs.status, ["queued", "running", "waiting"]), or(...owners)));
+      const reason = `${GATE_LABELS[a.kind]} rejected by the CEO${live ? " — the stage restarts with the feedback when the initiative is resumed" : ""}`;
+      for (const j of open) await this.app.engine.cancelJob(j.id, reason);
+    }
+    if (live && item && item.status !== "done") await this.app.work.update(item.id, { status: "blocked" });
   }
 
   async advance(initiativeId: string): Promise<void> {
@@ -182,7 +219,7 @@ export class LifecycleService {
     if (item && item.status !== "done") await this.app.work.update(item.id, { status: "done" });
     const next = nextStage(ini.stage, { skip: ini.skipStages, hasRepo: Boolean(ini.productId) });
     if (!next) {
-      await this.app.db.update(schema.initiatives).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() }).where(eq(schema.initiatives.id, ini.id));
+      await this.app.db.update(schema.initiatives).set({ status: "completed", statusReason: null, completedAt: new Date(), updatedAt: new Date() }).where(eq(schema.initiatives.id, ini.id));
       await this.app.bus.emit({ type: "initiative.updated", subjectType: "initiative", subjectId: ini.id, summary: `${ini.title} completed 🎉`, data: { status: "completed" } });
       await this.app.notifications.notify({ kind: "initiative", title: `${ini.title} completed`, link: `/initiatives/${ini.id}` });
       return;
@@ -190,36 +227,68 @@ export class LifecycleService {
     await this.startStage(ini, next);
   }
 
-  async setStatus(id: string, status: InitiativeStatus, reason?: string): Promise<Initiative> {
+  /** Sets the status and its human-readable reason (null clears it); a rejected gate is remembered for `resume`. */
+  async setStatus(id: string, status: InitiativeStatus, reason: string | null = null, options: { rejectedApprovalId?: string } = {}): Promise<Initiative> {
     const ini = await this.get(id);
+    // `pausedReason` is the pre-`status_reason` location of the reason (see migration 0001).
+    const { rejectedApprovalId: _previous, pausedReason: _legacy, ...metadata } = ini.metadata as Initiative["metadata"] & { pausedReason?: string };
     const [row] = await this.app.db
       .update(schema.initiatives)
-      .set({ status, updatedAt: new Date(), metadata: { ...ini.metadata, pausedReason: status === "paused" ? reason : undefined } })
+      .set({ status, statusReason: reason, updatedAt: new Date(), metadata: options.rejectedApprovalId ? { ...metadata, rejectedApprovalId: options.rejectedApprovalId } : metadata })
       .where(eq(schema.initiatives.id, id))
       .returning();
-    await this.app.bus.emit({ type: "initiative.updated", subjectType: "initiative", subjectId: id, summary: `${ini.title} ${status}${reason ? `: ${reason}` : ""}`, data: { status } });
+    await this.app.bus.emit({ type: "initiative.updated", subjectType: "initiative", subjectId: id, summary: `${ini.title} ${status}${reason ? `: ${reason}` : ""}`, data: { status, statusReason: reason } });
     return row!;
   }
 
-  async pause(id: string, reason: string): Promise<Initiative> {
-    const row = await this.setStatus(id, "paused", reason);
+  /** Pauses an active initiative. `force` also replaces the reason of an already paused one (e.g. a rejected gate). */
+  async pause(id: string, reason: string, options: { rejectedApprovalId?: string; force?: boolean } = {}): Promise<Initiative> {
+    const ini = await this.get(id);
+    if (ini.status === "cancelled" || ini.status === "completed") throw new DomainError(`the initiative is ${ini.status}`, "conflict");
+    if (ini.status === "paused" && !options.force) return ini;
+    const row = await this.setStatus(id, "paused", reason, options);
     await this.app.notifications.notify({ kind: "initiative", title: `${row.title} paused`, body: reason, link: `/initiatives/${id}` });
     return row;
   }
 
+  /**
+   * Resumes a paused initiative without duplicating work: queued jobs are re-dispatched; if the stage owner has no open
+   * job, a stage that finished while paused moves on, a rejected stage restarts with the CEO's feedback and any other
+   * stage restarts where it stopped.
+   */
   async resume(id: string): Promise<Initiative> {
     const ini = await this.get(id);
+    if (ini.status === "active") return ini;
+    if (ini.status === "cancelled" || ini.status === "completed") throw new DomainError(`a ${ini.status} initiative can't be resumed`, "conflict");
+    const rejected = ini.metadata.rejectedApprovalId ? await this.app.approvals.get(ini.metadata.rejectedApprovalId).catch(() => null) : null;
     const row = await this.setStatus(id, "active");
     const open = await this.app.db.select().from(schema.jobs).where(and(eq(schema.jobs.initiativeId, id), inArray(schema.jobs.status, ["queued", "running", "waiting"])));
-    if (open.length) await this.app.engine.requeueJobs(open.filter((j) => j.status === "queued").map((j) => j.id));
-    else await this.startStage(row, ini.stage, "The initiative was resumed by the CEO; continue this stage.");
+    await this.app.engine.requeueJobs(open.filter((j) => j.status === "queued").map((j) => j.id));
+    const item = await this.stageWorkItem(id, ini.stage);
+    if (item && open.some((j) => j.workItemId === item.id)) return this.get(id);
+    if (rejected?.status === "rejected") {
+      await this.startStage(row, ini.stage, rejectionFeedback(rejected), { restart: true });
+      return this.get(id);
+    }
+    const [last] = item ? await this.app.db.select().from(schema.jobs).where(eq(schema.jobs.workItemId, item.id)).orderBy(desc(schema.jobs.createdAt)).limit(1) : [];
+    if (item && last?.status === "succeeded" && last.result?.outcome !== "blocked") await this.onStageJobFinished(last, item);
+    else await this.startStage(row, ini.stage, "The initiative was resumed by the CEO; continue this stage.", { restart: true });
     return this.get(id);
   }
 
+  /** Cancels the initiative: stops its jobs, withdraws its open gates from the CEO inbox and closes unfinished work. */
   async cancel(id: string): Promise<Initiative> {
+    const ini = await this.get(id);
+    if (ini.status === "cancelled") return ini;
+    if (ini.status === "completed") throw new DomainError("a completed initiative can't be cancelled", "conflict");
+    // Status first, so jobs finishing below don't trigger stage follow-ups (escalations, new gates).
+    await this.setStatus(id, "cancelled", "Cancelled by the CEO");
     const jobs = await this.app.db.select({ id: schema.jobs.id }).from(schema.jobs).where(and(eq(schema.jobs.initiativeId, id), inArray(schema.jobs.status, ["queued", "running", "waiting"])));
     for (const j of jobs) await this.app.engine.cancelJob(j.id, "Initiative cancelled by the CEO");
-    return this.setStatus(id, "cancelled");
+    await this.app.approvals.withdraw(id, "Withdrawn — the initiative was cancelled.");
+    const unfinished = (await this.app.work.list({ initiativeId: id })).filter((w) => w.status !== "done" && w.status !== "cancelled");
+    for (const w of unfinished) await this.app.work.update(w.id, { status: "cancelled" });
+    return this.get(id);
   }
 
   async update(id: string, patch: { title?: string; summary?: string; targetDate?: string | null; budgetCredits?: number | null }): Promise<Initiative> {
@@ -247,7 +316,7 @@ export class LifecycleService {
       this.app.db
         .select({ id: schema.workItems.initiativeId, status: schema.workItems.status, n: sql<number>`count(*)::int` })
         .from(schema.workItems)
-        .where(and(inArray(schema.workItems.initiativeId, ids), sql`${schema.workItems.kind} <> 'stage'`))
+        .where(inArray(schema.workItems.initiativeId, ids))
         .groupBy(schema.workItems.initiativeId, schema.workItems.status),
       this.app.db
         .select({ id: schema.approvals.initiativeId, n: sql<number>`count(*)::int` })
@@ -268,14 +337,15 @@ export class LifecycleService {
         directive: r.directive,
         stage: r.stage,
         status: r.status,
-        statusReason: null,
+        statusReason: r.statusReason,
         productId: r.productId,
         productName: r.productId ? (productName.get(r.productId) ?? null) : null,
         targetDate: r.targetDate?.toISOString() ?? null,
         budgetCredits: r.budgetCredits,
         spentCredits: spend.get(r.id) ?? 0,
-        workItems: { total: mine.reduce((a, c) => a + c.n, 0), done: n("done"), inProgress: n("in_progress") + n("in_review"), blocked: n("blocked") },
-        pendingApprovals: pending.find((p) => p.id === r.id)?.n ?? 0,
+        // Same items as the Work items tab (GET /api/work-items?initiativeId=…), stage items included.
+        workItems: { total: mine.reduce((a, c) => a + c.n, 0), done: n("done"), inProgress: n("in_progress") + n("in_review"), blocked: n("blocked"), cancelled: n("cancelled") },
+        pendingApprovals: r.status === "cancelled" || r.status === "completed" ? 0 : (pending.find((p) => p.id === r.id)?.n ?? 0),
         createdAt: r.createdAt.toISOString(),
         updatedAt: r.updatedAt.toISOString(),
       };
@@ -324,4 +394,15 @@ export class LifecycleService {
     await this.app.bus.emit({ type: "initiative.updated", subjectType: "initiative", subjectId: initiativeId, summary: `Roadmap updated (${milestones.length} milestones)` });
     return milestones.length;
   }
+}
+
+/** Guidance for the stage owner when the stage restarts after the CEO rejected its gate. */
+function rejectionFeedback(a: Approval): string {
+  return [
+    `The CEO rejected the previous proposal at the ${GATE_LABELS[a.kind]} gate ("${a.title}") with this feedback:`,
+    "",
+    `> ${(a.decisionComment ?? "").trim().replace(/\n/g, "\n> ")}`,
+    "",
+    "Do not resubmit the same proposal. Propose a different approach that addresses this feedback: revise your deliverables (new document versions), then request the gate approval again.",
+  ].join("\n");
 }

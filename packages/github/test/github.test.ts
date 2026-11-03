@@ -20,10 +20,13 @@ describe("InMemoryGitHub", () => {
     expect((await gh.mergePullRequest(repo, pr!.number, "squash")).merged).toBe(true);
     expect((await gh.listWorkflowRuns(repo, { branch: "develop" }))[0]).toMatchObject({ name: "deploy-staging", conclusion: "success" });
 
+    expect(pr).toMatchObject({ changedFiles: 2, additions: 6, deletions: 0 });
     const release = await gh.createPullRequest(repo, { head: "develop", base: "main", title: "Release", body: "notes" });
+    // A release PR carries every change merged into the integration branch (+ the changelog entry).
+    expect(await gh.getPullRequest(repo, release.number)).toMatchObject({ changedFiles: 3, additions: 7, deletions: 0 });
     await gh.mergePullRequest(repo, release.number, "merge");
     const [prodRun] = await gh.listWorkflowRuns(repo, { branch: "main" });
-    expect(prodRun).toMatchObject({ name: "deploy-production", status: "waiting" });
+    expect(prodRun).toMatchObject({ name: "deploy-production", status: "waiting", url: `https://github.com/acme/invoicelite/actions/runs/${prodRun!.id}` });
     const pending = await gh.getPendingDeployments(repo, prodRun!.id);
     await gh.reviewPendingDeployments(repo, prodRun!.id, { environmentIds: pending.map((p) => p.environmentId), state: "approved", comment: "ship it" });
     expect((await gh.listWorkflowRuns(repo, { branch: "main" }))[0]).toMatchObject({ status: "completed", conclusion: "success" });

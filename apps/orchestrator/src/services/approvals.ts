@@ -1,8 +1,10 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  APPROVAL_KINDS,
   DomainError,
   GATE_LABELS,
   isGateEnabled,
+  isOneOf,
   type ApprovalDetailDTO,
   type ApprovalKind,
   type ApprovalOutcome,
@@ -11,6 +13,7 @@ import {
 } from "@techgens/core";
 import { schema, type Approval } from "@techgens/db";
 import type { Techgens } from "../app";
+import { approvalLink } from "./notifications";
 
 export interface ApprovalRequest {
   kind: ApprovalKind;
@@ -36,9 +39,10 @@ export class ApprovalService {
   async request(input: ApprovalRequest): Promise<{ approval: Approval; autoApproved: boolean }> {
     const db = this.app.db;
     const documentIds = input.documentIds ?? [];
-    // A revised submission after "changes requested" continues the same approval as a new round.
+    // A revised submission after "changes requested" continues the same approval as a new round. Budget overruns are
+    // per budget (deduplicated by the job engine), never revisions of each other.
     let approval: Approval | undefined;
-    if (input.initiativeId) {
+    if (input.initiativeId && input.kind !== "budget_overrun") {
       const [prev] = await db
         .select()
         .from(schema.approvals)
@@ -97,21 +101,31 @@ export class ApprovalService {
       summary: `${GATE_LABELS[input.kind]}: ${input.title}`,
       data: { kind: input.kind, initiativeId: input.initiativeId ?? null, round: approval!.round },
     });
-    await this.app.notifications.notify({ kind: "approval", title: `Approval needed — ${GATE_LABELS[input.kind]}`, body: input.title, link: `/approvals?id=${approval!.id}` });
+    await this.app.notifications.notify({ kind: "approval", title: `Approval needed — ${GATE_LABELS[input.kind]}`, body: input.title, link: approvalLink(approval!.id) });
     return { approval: approval!, autoApproved: false };
   }
 
   async decide(id: string, input: { outcome: ApprovalOutcome; comment?: string; extraCredits?: number }, actor: "ceo" | "system" = "ceo"): Promise<Approval> {
     const approval = await this.get(id);
     if (approval.status !== "pending") throw new DomainError(`approval is already ${approval.status}`, "conflict");
-    const comment = input.comment?.trim() ?? "";
+    let comment = input.comment?.trim() ?? "";
     if (actor === "ceo" && input.outcome !== "approved" && !comment) throw new DomainError("please explain what should change (comment required)");
     const status: ApprovalStatus = input.outcome;
+    let payload = approval.payload;
+    let grantNote = "";
+    if (approval.kind === "budget_overrun" && input.outcome === "approved") {
+      // Approving without an amount grants the suggestion; the decision always states what was granted and until when.
+      const granted = input.extraCredits ?? Number(approval.payload.suggestedExtraCredits ?? 0);
+      payload = { ...payload, grantedExtraCredits: granted };
+      grantNote = await this.app.budget.describeGrant(typeof approval.payload.budgetId === "string" ? approval.payload.budgetId : null, granted);
+      comment = comment ? `${comment} — ${grantNote}` : grantNote;
+    }
     const [updated] = await this.app.db
       .update(schema.approvals)
-      .set({ status, decisionComment: comment || null, decidedAt: new Date(), updatedAt: new Date() })
-      .where(eq(schema.approvals.id, id))
+      .set({ status, payload, decisionComment: comment || null, decidedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(schema.approvals.id, id), eq(schema.approvals.status, "pending")))
       .returning();
+    if (!updated) throw new DomainError("approval was decided concurrently", "conflict");
     await this.app.db.insert(schema.approvalDecisions).values({ approvalId: id, outcome: input.outcome, comment, actorType: actor, round: approval.round });
     if (approval.initiativeId) {
       await this.app.db.insert(schema.decisions).values({
@@ -123,10 +137,12 @@ export class ApprovalService {
       });
     }
     await this.app.docs.setStatus(approval.documentIds, input.outcome === "approved" ? "approved" : "draft");
+    // The decision is made: its "approval needed" notifications are no longer actionable (the event below refreshes the bell).
+    await this.app.notifications.markApprovalsRead([id]);
 
     let note = "";
     try {
-      note = await this.applySideEffects(updated!, input);
+      note = await this.applySideEffects(updated, input);
     } catch (err) {
       note = `Follow-up action failed: ${(err as Error).message}`;
       this.app.log.error({ err, approvalId: id }, "approval side effect failed");
@@ -136,12 +152,61 @@ export class ApprovalService {
       actorType: actor,
       subjectType: "approval",
       subjectId: id,
-      summary: `${GATE_LABELS[approval.kind]} ${input.outcome.replace("_", " ")}: ${approval.title}`,
-      data: { kind: approval.kind, outcome: input.outcome, initiativeId: approval.initiativeId },
+      summary: `${GATE_LABELS[approval.kind]} ${input.outcome.replace("_", " ")}: ${approval.title}${grantNote ? ` — ${grantNote}` : ""}`,
+      data: { kind: approval.kind, outcome: input.outcome, initiativeId: approval.initiativeId, ...(grantNote ? { grantedExtraCredits: payload.grantedExtraCredits } : {}) },
     });
-    await this.app.engine.onApprovalDecided(updated!, input.outcome, comment, note);
-    await this.app.lifecycle.onApprovalDecided(updated!, input.outcome, comment);
-    return updated!;
+    await this.app.engine.onApprovalDecided(updated, input.outcome, comment, note);
+    await this.app.lifecycle.onApprovalDecided(updated, input.outcome, comment);
+    return updated;
+  }
+
+  /**
+   * Withdraws open approvals (pending or awaiting a revision) without a CEO decision, e.g. when their initiative is
+   * cancelled: they leave the inbox (status `cancelled`) and their notifications are marked read.
+   */
+  async withdraw(initiativeId: string, reason: string): Promise<Approval[]> {
+    const now = new Date();
+    const withdrawn = await this.app.db
+      .update(schema.approvals)
+      .set({ status: "cancelled", decisionComment: reason, decidedAt: now, updatedAt: now })
+      .where(and(eq(schema.approvals.initiativeId, initiativeId), inArray(schema.approvals.status, ["pending", "changes_requested"])))
+      .returning();
+    if (!withdrawn.length) return [];
+    const ids = withdrawn.map((a) => a.id);
+    await this.app.docs.setStatus([...new Set(withdrawn.flatMap((a) => a.documentIds))], "draft");
+    await this.app.notifications.markApprovalsRead(ids);
+    for (const a of withdrawn) {
+      await this.app.bus.emit({
+        type: "approval.decided",
+        actorType: "system",
+        subjectType: "approval",
+        subjectId: a.id,
+        summary: `${GATE_LABELS[a.kind]} withdrawn: ${a.title}`,
+        data: { kind: a.kind, outcome: "withdrawn", status: "cancelled", initiativeId: a.initiativeId, reason },
+      });
+    }
+    // Jobs outside the initiative (e.g. blocked by a shared budget) must not keep waiting on a withdrawn approval.
+    const waiting = await this.app.db
+      .select()
+      .from(schema.jobs)
+      .where(and(eq(schema.jobs.status, "waiting"), eq(schema.jobs.waitReason, "approval"), inArray(sql<string>`${schema.jobs.waitState}->>'approvalId'`, ids)));
+    for (const job of waiting) await this.app.engine.resume(job.id, job.sessionId ? "The approval you were waiting for was withdrawn. Continue your assignment." : null);
+    return withdrawn;
+  }
+
+  /** Updates the gate policy and records one CEO decision (decision log + activity feed) per gate switched on or off. */
+  async updateGatePolicy(patch: Record<string, boolean>): Promise<void> {
+    const before = await this.app.settings.get("gatePolicy");
+    const known = Object.entries(patch).filter((e): e is [ApprovalKind, boolean] => isOneOf(APPROVAL_KINDS, e[0]));
+    await this.app.settings.set("gatePolicy", { ...before, ...Object.fromEntries(known) });
+    for (const [kind, enabled] of known) {
+      if (isGateEnabled(before, kind) === enabled) continue;
+      const label = GATE_LABELS[kind];
+      const summary = `CEO turned ${enabled ? "on" : "off"} the ${label} gate`;
+      const details = enabled ? `${label} requests need the CEO's approval again.` : `${label} requests are now approved automatically; each auto-approval is logged.`;
+      const [row] = await this.app.db.insert(schema.decisions).values({ initiativeId: null, type: "change", summary, details, actorType: "ceo" }).returning();
+      await this.app.bus.emit({ type: "decision.recorded", actorType: "ceo", subjectType: "settings", subjectId: "gatePolicy", summary, data: { decisionId: row!.id, type: "change", gate: kind, enabled } });
+    }
   }
 
   /** Executes CEO-authorised actions. Returns a note for the waiting agent. */
@@ -151,9 +216,9 @@ export class ApprovalService {
       case "budget_overrun": {
         // Blocked jobs wait on this approval; JobEngine.onApprovalDecided resumes or fails them.
         if (!approved) return "";
-        const extra = input.extraCredits ?? Number(a.payload.suggestedExtraCredits ?? 0);
+        const extra = Number(a.payload.grantedExtraCredits ?? input.extraCredits ?? a.payload.suggestedExtraCredits ?? 0);
         if (a.payload.budgetId && extra > 0) await this.app.budget.grantExtra(String(a.payload.budgetId), extra);
-        return `Budget extended by ${extra} credits.`;
+        return a.decisionComment ?? `Budget extended by ${extra} credits.`;
       }
       case "merge_to_main":
         return approved ? this.app.delivery.mergeRelease(a) : "";
@@ -203,6 +268,7 @@ export class ApprovalService {
       round: a.round,
       createdAt: a.createdAt.toISOString(),
       decidedAt: a.decidedAt?.toISOString() ?? null,
+      decisionComment: a.decisionComment,
     }));
   }
 

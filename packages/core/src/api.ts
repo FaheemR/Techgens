@@ -95,7 +95,8 @@ export interface InitiativeSummaryDTO {
   targetDate: string | null;
   budgetCredits: number | null;
   spentCredits: number;
-  workItems: { total: number; done: number; inProgress: number; blocked: number };
+  /** Counts every work item listed for the initiative (stage items included), by status. */
+  workItems: { total: number; done: number; inProgress: number; blocked: number; cancelled: number };
   pendingApprovals: number;
   createdAt: string;
   updatedAt: string;
@@ -246,6 +247,8 @@ export interface ApprovalSummaryDTO {
   round: number;
   createdAt: string;
   decidedAt: string | null;
+  /** Latest decision note: the CEO's comment, an auto-approval note or "Withdrawn — the initiative was cancelled.". */
+  decisionComment: string | null;
 }
 
 export interface ApprovalDetailDTO extends ApprovalSummaryDTO {
@@ -254,10 +257,81 @@ export interface ApprovalDetailDTO extends ApprovalSummaryDTO {
   decisions: Array<{ outcome: ApprovalOutcome; comment: string; round: number; createdAt: string }>;
 }
 
+/** Check run shown as decision evidence on merge gates. */
+export interface CheckEvidence {
+  name: string;
+  /** "success", "failure", … or null while the check is still running. */
+  conclusion: string | null;
+}
+
+/**
+ * `ApprovalDetailDTO.payload` of a `merge_to_main` approval (stable keys; raw ids end in `Id`/`Ids`). Evidence fields are
+ * null when GitHub could not provide them.
+ */
+export interface MergeToMainPayload {
+  stage?: LifecycleStage;
+  prNumber: number;
+  prUrl: string | null;
+  prTitle: string | null;
+  checks: CheckEvidence[];
+  filesChanged: number | null;
+  additions: number | null;
+  deletions: number | null;
+  /** Head commit of the release pull request. */
+  commitSha: string | null;
+  /** Short markdown excerpt of the release notes; the full document is attached (see `releaseNotesDocumentId`). */
+  releaseNotes: string | null;
+  releaseNotesDocumentId?: string;
+  /** Pull requests merged into the integration branch for this initiative ("#12 Item API"). */
+  changes: string[];
+}
+
+/** `ApprovalDetailDTO.payload` of a `prod_deploy` approval. */
+export interface ProdDeployPayload {
+  stage?: LifecycleStage;
+  environment: string;
+  runId: number;
+  runUrl: string | null;
+  /** Commit being deployed. */
+  commitSha: string | null;
+  version?: string;
+  /** True when the same code passed the staging deployment. */
+  stagingVerified: boolean;
+  /** One-line staging evidence, e.g. "deploy-staging run 1004 succeeded on 3f2a1bc". */
+  stagingEvidence: string;
+  rollback: string;
+  /** Pull requests in this release ("#12 Item API"). */
+  changes: string[];
+  releasePrNumber?: number;
+  releasePrUrl?: string;
+}
+
+/** `ApprovalDetailDTO.payload` of a `budget_overrun` approval. */
+export interface BudgetOverrunPayload {
+  budgetId: string;
+  /** Jobs paused by this overrun (resumed on approval). */
+  jobIds: string[];
+  scope: BudgetScope;
+  /** "Company", an initiative title, an agent or product name… */
+  scopeName: string;
+  period: BudgetPeriod;
+  /** Base limit of the budget (grants excluded). */
+  limitCredits: number;
+  /** Extra credits already granted for the current window. */
+  grantedCredits: number;
+  spentCredits: number;
+  /** End of the current accounting window (ISO); null for total budgets. */
+  windowEndsAt: string | null;
+  /** Granted when the CEO approves without an amount. */
+  suggestedExtraCredits: number;
+  /** Set on approval: the extra credits granted for the current window. */
+  grantedExtraCredits?: number;
+}
+
 export interface DecideApprovalRequest {
   outcome: ApprovalOutcome;
   comment?: string;
-  /** For budget_overrun approvals: extra credits granted for the current window. */
+  /** For budget_overrun approvals: extra credits granted for the current window (default: `suggestedExtraCredits`). */
   extraCredits?: number;
 }
 
@@ -267,7 +341,12 @@ export interface BudgetDTO {
   scopeId: string | null;
   scopeLabel: string;
   period: BudgetPeriod;
+  /** Base limit per window (temporary grants excluded). */
   limitCredits: number;
+  /** Extra credits the CEO granted for the current window only; enforcement uses `limitCredits + grantedCredits`. */
+  grantedCredits: number;
+  /** End of the current window (ISO), when grants expire; null for total budgets. */
+  windowEndsAt: string | null;
   warnPct: number;
   enabled: boolean;
   spentCredits: number;

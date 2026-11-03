@@ -45,7 +45,8 @@ export interface InitiativeMetadata {
   releasePrNumber?: number;
   releasePrUrl?: string;
   productionRunId?: number;
-  pausedReason?: string;
+  /** Stage gate the CEO rejected while the initiative is paused; resuming restarts that stage with the feedback. */
+  rejectedApprovalId?: string;
 }
 
 /** Single-row table holding company-level strategy. */
@@ -90,6 +91,8 @@ export const initiatives = pgTable(
     summary: text("summary").notNull().default(""),
     stage: text("stage").$type<LifecycleStage>().notNull().default("intake"),
     status: text("status").$type<InitiativeStatus>().notNull().default("proposed"),
+    /** Why the initiative is in its current status (e.g. "Rejected at Vision & roadmap: …"); null when active. */
+    statusReason: text("status_reason"),
     skipStages: jsonb("skip_stages").$type<LifecycleStage[]>().notNull().default([]),
     targetDate: timestamp("target_date", { withTimezone: true }),
     budgetCredits: doublePrecision("budget_credits"),

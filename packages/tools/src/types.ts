@@ -45,7 +45,11 @@ export interface ToolServices {
   listDocuments(c: ToolCaller, i: { initiativeId?: string; kind?: DocumentKind }): Promise<DocumentSummary[]>;
   searchKnowledge(c: ToolCaller, i: { query: string; limit: number }): Promise<Array<{ id: string; title: string; kind: string; snippet: string }>>;
   getStatus(c: ToolCaller, i: { initiativeId?: string }): Promise<string>;
-  createInitiative(c: ToolCaller, i: { title: string; summary: string; productName?: string; targetDate?: string; budgetCredits?: number; skipStages?: LifecycleStage[] }): Promise<{ initiativeId: string }>;
+  /** Applies the default budget cap when none is given; attaches a product only when `productName` is given. */
+  createInitiative(
+    c: ToolCaller,
+    i: { title: string; summary: string; productName?: string; targetDate?: string; budgetCredits?: number; skipStages?: LifecycleStage[] },
+  ): Promise<{ initiativeId: string; budgetCredits: number; defaultBudget: boolean; productName: string | null }>;
   proposeRoadmap(c: ToolCaller, i: { initiativeId?: string; milestones: Array<{ title: string; description?: string; dueDate?: string }> }): Promise<{ count: number }>;
   createWorkItem(c: ToolCaller, i: { kind: WorkItemKind; title: string; description: string; parentId?: string; priority?: Priority; forCodingAgent?: boolean; dependsOn?: string[]; assignee?: string }): Promise<{ id: string; githubUrl: string | null }>;
   updateWorkItem(c: ToolCaller, i: { id: string; status?: WorkItemStatus; description?: string; priority?: Priority; assignee?: string }): Promise<void>;

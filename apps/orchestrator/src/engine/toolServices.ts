@@ -1,5 +1,5 @@
 import { asc, eq, inArray, sql } from "drizzle-orm";
-import { DomainError, GATE_LABELS, STAGES, formatCredits, truncate } from "@techgens/core";
+import { DEFAULT_INITIATIVE_BUDGET_CREDITS, DomainError, GATE_LABELS, STAGES, formatCredits, truncate } from "@techgens/core";
 import { buildSystemPrompt } from "@techgens/agents";
 import { buildAgentTools, type ToolCaller, type ToolServices } from "@techgens/tools";
 import { schema } from "@techgens/db";
@@ -129,6 +129,12 @@ export function createToolServices(app: Techgens, engine: JobEngine): ToolServic
         if (!payload.runId) throw new DomainError("No production deployment is waiting for approval yet. Check get_deployments and try again once the deploy-production run is waiting.");
       }
       if (i.kind === "hire" && typeof payload.roleId !== "string") throw new DomainError("Hire requests need payload.roleId (and optionally payload.name).");
+      if (ini) {
+        // Merge/deploy gates carry GitHub facts (PR, checks, diff size, staging run…) and the release documents as evidence.
+        const evidence = await app.delivery.gateEvidence(i.kind, ini, payload);
+        Object.assign(payload, evidence.payload);
+        documentIds = [...new Set([...documentIds, ...evidence.documentIds])];
+      }
       const { approval, autoApproved } = await app.approvals.request({ kind: i.kind, title: i.title, summary: i.summary, initiativeId: c.initiativeId, workItemId: c.workItemId, jobId: c.jobId, documentIds, payload, requestedByAgentId: c.agentId });
       engine.turnState(c.jobId).awaitingApprovalId = approval.id;
       return { approvalId: approval.id, autoApproved };
@@ -164,17 +170,21 @@ export function createToolServices(app: Techgens, engine: JobEngine): ToolServic
 
     async createInitiative(c, i) {
       const job = await engine.getJob(c.jobId);
+      // Every agent-created initiative is capped; a product is only attached when the directive names or implies one.
+      const budgetCredits = i.budgetCredits ?? DEFAULT_INITIATIVE_BUDGET_CREDITS;
       const ini = await app.lifecycle.create({
         title: i.title,
         directive: job.kind === "chat" ? job.prompt : i.summary,
         summary: i.summary,
         productName: i.productName,
+        createProduct: false,
         targetDate: i.targetDate ?? null,
-        budgetCredits: i.budgetCredits ?? null,
+        budgetCredits,
         skipStages: i.skipStages,
         createdByAgentId: c.agentId,
       });
-      return { initiativeId: ini.id };
+      const product = ini.productId ? await app.company.getProduct(ini.productId) : null;
+      return { initiativeId: ini.id, budgetCredits, defaultBudget: i.budgetCredits === undefined, productName: product?.name ?? null };
     },
 
     async proposeRoadmap(c, i) {
@@ -249,7 +259,7 @@ async function statusReport(app: Techgens, initiativeId: string | null): Promise
     const items = await app.work.list({ initiativeId });
     const open = items.filter((w) => w.kind !== "stage" && w.status !== "done" && w.status !== "cancelled");
     return [
-      `# ${d.title} — ${d.status}, stage ${d.stage}`,
+      `# ${d.title} — ${d.status}${d.statusReason ? ` (${d.statusReason})` : ""}, stage ${d.stage}`,
       `Stages: ${d.stages.map((s) => `${s.stage}:${s.state}`).join(", ")}`,
       `Work items: ${d.workItems.done}/${d.workItems.total} done, ${d.workItems.inProgress} in progress, ${d.workItems.blocked} blocked`,
       `Spend: ${formatCredits(d.spentCredits)}${d.budgetCredits ? ` of ${d.budgetCredits}` : ""} credits`,
@@ -263,9 +273,11 @@ async function statusReport(app: Techgens, initiativeId: string | null): Promise
   const pending = await app.approvals.summaries(await app.approvals.list("pending"));
   const usage = await app.budget.summary(7);
   const jobs = await app.db.select({ status: schema.jobs.status, n: sql<number>`count(*)::int` }).from(schema.jobs).where(inArray(schema.jobs.status, ["queued", "running", "waiting"])).groupBy(schema.jobs.status);
+  const products = await app.company.listProducts();
   return [
     "# Company status",
-    ...(inis.length ? inis.map((x) => `- ${x.title} (id ${x.id}): ${x.status}, stage ${x.stage}, work ${x.workItems.done}/${x.workItems.total}, spent ${formatCredits(x.spentCredits)} credits`) : ["- No initiatives yet."]),
+    `Products: ${products.map((p) => p.name).join("; ") || "none yet"}`,
+    ...(inis.length ? inis.map((x) => `- ${x.title} (id ${x.id}): ${x.status}${x.statusReason ? ` (${x.statusReason})` : ""}, stage ${x.stage}, work ${x.workItems.done}/${x.workItems.total}, spent ${formatCredits(x.spentCredits)}${x.budgetCredits ? ` of ${formatCredits(x.budgetCredits)}` : ""} credits`) : ["- No initiatives yet."]),
     `Pending CEO approvals: ${pending.map((a) => `${GATE_LABELS[a.kind]} — ${a.title}`).join("; ") || "none"}`,
     `Agent jobs: ${jobs.map((j) => `${j.n} ${j.status}`).join(", ") || "idle"}`,
     `AI credits: today ${formatCredits(usage.todayCredits)}, this month ${formatCredits(usage.monthCredits)}`,

@@ -43,8 +43,9 @@ queued ──claim──▶ running ──turn ends──┬─ complete_task �
 * **Consultation**: `ask_agent` runs a short read-only session for the colleague and returns the answer inline.
 * **Budgets**: every `assistant.usage` event (nano-AIU → AI credits) is written to `usage_ledger` with
   agent/role/department/initiative. Before each turn the engine checks company, department, agent, initiative and
-  product budgets; at 80 % a warning event is emitted, at 100 % the job waits on a `budget_overrun` approval. Each job
-  also has a per-session `sessionLimits.maxAiCredits` cap from the role.
+  product budgets; at 80 % a warning event is emitted, at 100 % the job waits on a `budget_overrun` approval. Credits
+  the CEO grants on approval only extend the current window (`budget_alerts.extra_credits` per window start), so they
+  expire with it. Each job also has a per-session `sessionLimits.maxAiCredits` cap from the role.
 * **Concurrency**: one running assignment per agent (chat is exempt); global worker concurrency is configurable.
 * **Kill switches**: global pause, per-agent pause/retire, per-initiative pause/cancel, per-job cancel (aborts the
   live session and cascades to children).
@@ -55,8 +56,11 @@ queued ──claim──▶ running ──turn ends──┬─ complete_task �
 operate`. Each stage creates a stage work item and a job for the owner role (`STAGES` in `packages/core`). Gated
 stages (`vision_roadmap`, `spec`, `architecture`, `merge_to_main`, `prod_deploy`) are **enforced by the engine**: an
 owner can request approval itself, and if it finishes without one the engine files the gate. CEO decisions resume the
-waiting job (`approved` / `changes_requested` with feedback / `rejected` → initiative paused). Gates can be switched
-off in Settings (auto-approved and logged).
+waiting job (`approved` / `changes_requested` with feedback). `rejected` pauses the initiative (`statusReason`
+"Rejected at <gate>: <comment>") and cancels the stage's jobs; resuming restarts the stage (same stage work item) with
+the CEO's comment as guidance, and the new proposal is a new approval. Cancelling an initiative withdraws its open
+approvals (status `cancelled`). Gates can be switched off in Settings (auto-approved and logged; each policy change is
+recorded as a CEO decision).
 
 Side effects executed with the CEO's identity after approval: approved specs/architecture are published to the repo
 `docs/`; `merge_to_main` merges the release PR; `prod_deploy` approves the waiting GitHub environment deployment.

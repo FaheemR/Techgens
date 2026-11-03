@@ -1,8 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { DomainError, truncate } from "@techgens/core";
+import { DomainError, truncate, type ApprovalKind, type MergeToMainPayload, type ProdDeployPayload } from "@techgens/core";
 import type { ToolCaller } from "@techgens/tools";
 import type { GitHubPort, PullRequestInfo, RepoRef } from "@techgens/github";
-import { schema, type Approval, type CodingStatus, type Initiative, type Job, type Product, type WorkItem } from "@techgens/db";
+import { schema, type Approval, type CodingStatus, type Document, type Initiative, type Job, type Product, type WorkItem } from "@techgens/db";
 import type { Techgens } from "../app";
 
 const ACTIVE_CODING: CodingStatus[] = ["assigned", "pr_open", "ready_for_review", "changes_requested", "approved"];
@@ -12,6 +12,14 @@ function inferCodingRole(item: WorkItem): string {
   if (/\b(e2e|end-to-end|playwright|test suite|tests? for|qa)\b/.test(text)) return "qa-engineer";
   if (/\b(ui|ux|page|screen|component|frontend|front-end|css|react|layout|form)\b/.test(text)) return "frontend-engineer";
   return "backend-engineer";
+}
+
+const DEFAULT_ROLLBACK =
+  "Shift 100% of production traffic back to the previous Azure Container Apps revision, which stays deployed until the new revision is verified.";
+
+/** Short markdown excerpt of a document for an approval brief (the leading title heading is dropped). */
+function excerpt(doc: Document, max = 800): string {
+  return truncate(doc.content.replace(/^\s*#\s+[^\n]*\n+/, "").trim(), max);
 }
 
 /** Copilot cloud agent marks work in progress with a "[WIP]" title prefix and may keep the PR as a draft. */
@@ -160,6 +168,84 @@ export class DeliveryService {
     // The production deployment row is created from its workflow run (monitor sync / prod_deploy approval).
     await this.app.bus.emit({ type: "deployment.updated", subjectType: "initiative", subjectId: ini.id, summary: `Release #${prNumber} merged into ${product.defaultBranch}; production deploy starting`, data: { sha: result.sha } });
     return `Release PR #${prNumber} merged into ${product.defaultBranch}. The production deployment will wait for the prod_deploy approval.`;
+  }
+
+  /**
+   * Decision evidence for the merge-to-main and production-deploy gates, as stable payload keys (`MergeToMainPayload`,
+   * `ProdDeployPayload`) plus documents to attach (release notes, test plan). Best effort: never throws.
+   */
+  async gateEvidence(kind: ApprovalKind, ini: Initiative, given: Record<string, unknown>): Promise<{ payload: Record<string, unknown>; documentIds: string[] }> {
+    if (kind !== "merge_to_main" && kind !== "prod_deploy") return { payload: {}, documentIds: [] };
+    const docs = await this.app.docs.list({ initiativeId: ini.id });
+    const releaseNotes = docs.find((d) => d.kind === "release_notes");
+    const testPlan = docs.find((d) => d.kind === "test_plan");
+    const documentIds = [releaseNotes?.id, testPlan?.id].filter((x): x is string => Boolean(x));
+    try {
+      const changes = await this.releasedChanges(ini.id);
+      const payload = kind === "merge_to_main" ? await this.mergeEvidence(ini, given, changes, releaseNotes) : await this.deployEvidence(ini, given, changes, testPlan);
+      return { payload: { ...payload }, documentIds };
+    } catch (err) {
+      this.app.log.warn({ err: (err as Error).message, initiativeId: ini.id, kind }, "gate evidence unavailable");
+      return { payload: {}, documentIds };
+    }
+  }
+
+  /** Coding pull requests merged into the integration branch for the initiative ("#12 Item API"). */
+  private async releasedChanges(initiativeId: string): Promise<string[]> {
+    const items = await this.app.work.list({ initiativeId });
+    return items.filter((w) => w.prNumber && w.codingStatus === "merged").map((w) => `#${w.prNumber} ${w.title}`).slice(0, 30);
+  }
+
+  private async mergeEvidence(ini: Initiative, given: Record<string, unknown>, changes: string[], releaseNotes: Document | undefined): Promise<Partial<MergeToMainPayload>> {
+    const evidence: Partial<MergeToMainPayload> = {
+      changes,
+      releaseNotes: releaseNotes ? excerpt(releaseNotes) : null,
+      ...(releaseNotes ? { releaseNotesDocumentId: releaseNotes.id } : {}),
+    };
+    const prNumber = Number(given.prNumber ?? ini.metadata.releasePrNumber);
+    const ctx = prNumber ? await this.repoFor(ini.id).catch(() => null) : null;
+    if (!ctx) return evidence;
+    const pr = await ctx.port.getPullRequest(ctx.repo, prNumber);
+    const checks = await ctx.port.getCheckStatus(ctx.repo, pr.headSha).catch(() => ({ checks: [] as Array<{ name: string; conclusion: string | null }> }));
+    return {
+      ...evidence,
+      prNumber: pr.number,
+      prUrl: pr.url,
+      prTitle: pr.title,
+      checks: checks.checks.map((c) => ({ name: c.name, conclusion: c.conclusion })),
+      filesChanged: pr.changedFiles ?? null,
+      additions: pr.additions ?? null,
+      deletions: pr.deletions ?? null,
+      commitSha: pr.headSha,
+    };
+  }
+
+  private async deployEvidence(ini: Initiative, given: Record<string, unknown>, changes: string[], testPlan: Document | undefined): Promise<Partial<ProdDeployPayload>> {
+    const rollback = typeof given.rollback === "string" && given.rollback.trim() ? given.rollback.trim() : DEFAULT_ROLLBACK;
+    const evidence: Partial<ProdDeployPayload> = { environment: "production", rollback, changes, stagingVerified: false, stagingEvidence: "No staging deployment found." };
+    const ctx = await this.repoFor(ini.id).catch(() => null);
+    if (!ctx) return evidence;
+    const runId = Number(given.runId ?? (await this.findWaitingProductionRun(ini))) || undefined;
+    const runs = await ctx.port.listWorkflowRuns(ctx.repo, { perPage: 30 });
+    const run = runs.find((r) => r.id === runId);
+    const releasePr = ini.metadata.releasePrNumber ? await ctx.port.getPullRequest(ctx.repo, ini.metadata.releasePrNumber).catch(() => null) : null;
+    // The released code is the integration-branch head merged by the release PR; staging must have deployed exactly that.
+    const released = releasePr?.headSha;
+    const stagingRuns = runs.filter((r) => r.branch === ctx.product.integrationBranch && /deploy/i.test(r.name));
+    const staging = (released ? stagingRuns.find((r) => r.sha === released) : undefined) ?? stagingRuns[0];
+    const stagingVerified = Boolean(staging && staging.status === "completed" && staging.conclusion === "success" && (!released || staging.sha === released));
+    const stagingEvidence = staging
+      ? `${staging.name} run ${staging.id} ${staging.status === "completed" ? (staging.conclusion === "success" ? "succeeded" : (staging.conclusion ?? "finished")) : staging.status} on ${staging.sha.slice(0, 7)}${released && staging.sha !== released ? ` (released commit ${released.slice(0, 7)} was not deployed to staging)` : ""}${testPlan ? `; QA verification: "${testPlan.title}"` : ""}`
+      : "No staging deployment found for this release.";
+    return {
+      ...evidence,
+      ...(runId ? { runId } : {}),
+      runUrl: run?.url ?? null,
+      commitSha: run?.sha ?? null,
+      stagingVerified,
+      stagingEvidence,
+      ...(releasePr ? { releasePrNumber: releasePr.number, releasePrUrl: releasePr.url } : {}),
+    };
   }
 
   async findWaitingProductionRun(ini: Initiative): Promise<number | undefined> {

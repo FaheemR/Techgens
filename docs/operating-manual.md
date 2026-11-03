@@ -8,7 +8,10 @@ agents within budget. Everything else is delegated.
 2. **Approvals** — work the inbox. Every item shows the documents or PRs under review. Choose:
    * **Approve** — work continues (for releases/deploys Techgens performs the merge/deployment with your identity).
    * **Request changes** — write concrete feedback; the agent revises and resubmits (a new *round*).
-   * **Reject** — the initiative pauses until you resume or cancel it.
+   * **Reject** — the initiative pauses with the reason *Rejected at <gate>: <your comment>*. **Resume** restarts that
+     stage: its owner proposes a different approach based on your comment and submits a new approval. Or cancel it.
+   * Approvals leave the inbox (and their notifications are marked read) as soon as they are decided, auto-approved
+     or withdrawn — cancelling an initiative withdraws its open gates.
 3. **Directives** — talk to the Chief of Staff: new initiatives, priorities, status questions ("where are we on
    InvoiceLite?"). Good directives state the outcome, the user, the deadline and the budget.
 
@@ -29,12 +32,21 @@ agents within budget. Everything else is delegated.
 | Budget overrun | any time | which budget, spend, how many extra credits to grant |
 | Decision / escalation | any time | options and the agent's recommendation |
 
-Turn gates off in **Settings → Gate policy** to let them auto-approve (each auto-approval is logged).
+Turn gates off in **Settings → Gate policy** to let them auto-approve (each auto-approval is logged). Every gate you
+switch on or off is recorded in the activity feed and the company decision log ("CEO turned off the Production deploy
+gate").
+
+*Merge to main* approvals carry the release PR (link, title, checks, files and lines changed, head commit), the
+release notes and the test plan; *Production deploy* approvals carry the run link, the commit, staging verification,
+the rollback plan and the PRs in the release.
 
 ## Budgets
 Copilot usage is measured in **AI credits**. Defaults: company 3,000/month; each agent has a daily budget from its
 role. Add department, product or initiative budgets in **Budget**. At 80 % you get a warning; at 100 % work pauses
-and a *budget overrun* approval asks you how many extra credits to grant. Choose cheaper models for routine roles in
+and a *budget overrun* approval asks you how many extra credits to grant. A grant only extends the current window
+(today, this week or this month) and expires with it — the budget's limit is unchanged; approving without an amount
+grants the suggested credits, and the decision states what was granted. Initiatives created by the Chief of Staff
+always get a total budget cap (100 credits when your directive names none). Choose cheaper models for routine roles in
 **Settings → Models**. Also set a spending limit for Copilot in your GitHub billing settings.
 
 ## The org

@@ -209,6 +209,9 @@ export class OctokitGitHub implements GitHubPort {
       headSha: pr.head.sha,
       author: pr.user?.login ?? "",
       reviews: [...latest].map(([author, state]) => ({ author, state })),
+      additions: pr.additions,
+      deletions: pr.deletions,
+      changedFiles: pr.changed_files,
     };
   }
 

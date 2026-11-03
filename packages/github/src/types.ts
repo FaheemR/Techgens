@@ -42,6 +42,10 @@ export interface PullRequestInfo {
   author: string;
   /** Latest review state per reviewer. */
   reviews: Array<{ author: string; state: string }>;
+  /** Diff size (decision evidence); absent when the source doesn't report it. */
+  additions?: number;
+  deletions?: number;
+  changedFiles?: number;
 }
 
 export type CheckState = "success" | "failure" | "pending" | "none";

@@ -92,6 +92,26 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
 
     // Verification → release: CEO approves the merge to main; Techgens merges with the CEO's identity.
     expect(await pendingKinds(app)).toEqual(["merge_to_main"]);
+    // The merge gate carries its decision evidence: the release PR, its checks and size, release notes and test plan.
+    const mergeGate = await app.approvals.detail((await app.approvals.list("pending"))[0]!.id);
+    expect(mergeGate.payload).toMatchObject({
+      stage: "release",
+      prNumber: expect.any(Number),
+      prUrl: expect.stringMatching(/^https:\/\/github\.com\/acme\/invoicelite\/pull\/\d+$/),
+      prTitle: "Release: InvoiceLite MVP",
+      checks: [
+        { name: "ci / build-and-test", conclusion: "success" },
+        { name: "codeql / analyze", conclusion: "success" },
+      ],
+      filesChanged: 7,
+      additions: 19,
+      deletions: 0,
+      commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
+      releaseNotes: expect.stringMatching(/^## Highlights/),
+      releaseNotesDocumentId: expect.any(String),
+    });
+    expect(mergeGate.payload.changes).toEqual(codingTasks.map((t) => `#${t.prNumber} ${t.title}`));
+    expect(mergeGate.documents.map((d) => d.kind).sort()).toEqual(["release_notes", "test_plan"]);
     await decide(app, "merge_to_main");
     const release = prs.length ? [...repo.prs.values()].find((p) => p.baseRef === "main")! : undefined;
     expect(release).toMatchObject({ merged: true, headRef: "develop" });
@@ -100,6 +120,20 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
     expect(await pendingKinds(app)).toEqual(["prod_deploy"]);
     const prodRun = repo.runs.find((r) => r.branch === "main")!;
     expect(prodRun.status).toBe("waiting");
+    const deployGate = await app.approvals.detail((await app.approvals.list("pending"))[0]!.id);
+    expect(deployGate.payload).toMatchObject({
+      stage: "deployment",
+      environment: "production",
+      runId: prodRun.id,
+      runUrl: `https://github.com/acme/invoicelite/actions/runs/${prodRun.id}`,
+      commitSha: prodRun.sha,
+      stagingVerified: true,
+      stagingEvidence: expect.stringMatching(/^deploy-staging run \d+ succeeded on [0-9a-f]{7}; QA verification: "InvoiceLite MVP — Test plan/),
+      rollback: expect.stringMatching(/previous Container Apps revision/),
+      changes: mergeGate.payload.changes,
+      releasePrNumber: release!.number,
+      releasePrUrl: release!.url,
+    });
     await decide(app, "prod_deploy");
     expect(repo.runs.find((r) => r.id === prodRun.id)).toMatchObject({ status: "completed", conclusion: "success" });
 

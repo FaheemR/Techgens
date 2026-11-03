@@ -84,7 +84,7 @@ export async function buildServer(app: Techgens): Promise<FastifyInstance> {
       pendingApprovals: await app.approvals.summaries(pending),
       activeJobs: jobs.filter((j) => ["queued", "running", "waiting"].includes(j.status)),
       goals: goals.map(goalDTO),
-      usage: { todayCredits: usage.todayCredits, monthCredits: usage.monthCredits, monthBudgetCredits: monthBudget?.limitCredits ?? null },
+      usage: { todayCredits: usage.todayCredits, monthCredits: usage.monthCredits, monthBudgetCredits: monthBudget ? monthBudget.limitCredits + monthBudget.grantedCredits : null },
       recentEvents: events,
       openIncidents: incidents.length,
     };
@@ -129,7 +129,7 @@ export async function buildServer(app: Techgens): Promise<FastifyInstance> {
       req.body,
     );
     if (body.mcpServers) await app.settings.set("mcpServers", body.mcpServers);
-    if (body.gatePolicy) await app.settings.set("gatePolicy", { ...(await app.settings.get("gatePolicy")), ...body.gatePolicy });
+    if (body.gatePolicy) await app.approvals.updateGatePolicy(body.gatePolicy);
     if (body.roleModels) await app.settings.set("roleModels", Object.fromEntries(Object.entries(body.roleModels).filter(([, v]) => v)));
     if (body.maxDelegationDepth) await app.settings.set("maxDelegationDepth", body.maxDelegationDepth);
     if (body.maxConcurrentJobs) await app.settings.set("maxConcurrentJobs", body.maxConcurrentJobs);

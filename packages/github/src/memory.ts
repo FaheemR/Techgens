@@ -15,6 +15,16 @@ import {
 
 const sha = () => randomBytes(20).toString("hex");
 
+/** Unified-diff statistics, as GitHub reports them on pull requests. */
+function diffStats(diff: string): { additions: number; deletions: number; changedFiles: number } {
+  const lines = diff.split("\n");
+  return {
+    additions: lines.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length,
+    deletions: lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length,
+    changedFiles: lines.filter((l) => l.startsWith("diff --git")).length,
+  };
+}
+
 interface FakeIssue extends IssueInfo {
   body: string;
   labels: string[];
@@ -35,6 +45,8 @@ interface FakeRepo {
   issues: Map<number, FakeIssue>;
   prs: Map<number, FakePr>;
   checks: Map<string, CheckStatus>;
+  /** Pull requests whose changes each branch contains (release PRs carry the integration branch's merged PRs). */
+  merged: Map<string, number[]>;
   runs: WorkflowRunInfo[];
   pending: Map<number, PendingDeploymentInfo[]>;
   environments: Map<string, { reviewerUserIds: number[]; branches: string[]; vars: Record<string, string> }>;
@@ -80,6 +92,7 @@ export class InMemoryGitHub implements GitHubPort {
       issues: new Map(),
       prs: new Map(),
       checks: new Map(),
+      merged: new Map(),
       runs: [],
       pending: new Map(),
       environments: new Map(),
@@ -178,7 +191,17 @@ export class InMemoryGitHub implements GitHubPort {
       draft: opts.draft ?? false,
       author: "Copilot",
       linkedIssues: [issueNumber],
-      diff: `diff --git a/src/${head}.ts b/src/${head}.ts\n+// ${issue.title}\n`,
+      diff: [
+        `diff --git a/src/issue-${issueNumber}.ts b/src/issue-${issueNumber}.ts`,
+        `+// ${issue.title}`,
+        `+export function issue${issueNumber}(): { ok: boolean } {`,
+        "+  return { ok: true };",
+        "+}",
+        `diff --git a/test/issue-${issueNumber}.test.ts b/test/issue-${issueNumber}.test.ts`,
+        `+import { issue${issueNumber} } from "../src/issue-${issueNumber}";`,
+        `+test("${issue.title.replace(/"/g, "'")}", () => expect(issue${issueNumber}().ok).toBe(true));`,
+        "",
+      ].join("\n"),
     });
     this.setChecks(r, pr.headSha, opts.checks ?? "success");
     return { ...pr };
@@ -202,6 +225,7 @@ export class InMemoryGitHub implements GitHubPort {
       reviews: [],
       linkedIssues: p.linkedIssues,
       diff: p.diff,
+      ...diffStats(p.diff),
     };
     repo.prs.set(number, pr);
     return pr;
@@ -237,7 +261,11 @@ export class InMemoryGitHub implements GitHubPort {
   async createPullRequest(r: RepoRef, input: { head: string; base: string; title: string; body: string; draft?: boolean }) {
     const repo = this.repo(r);
     if (!repo.branches.has(input.head)) throw Object.assign(new Error(`head ${input.head} not found`), { status: 422 });
-    const pr = this.addPr(repo, { ...input, draft: input.draft ?? false, author: this.viewer.login, linkedIssues: [], diff: `diff --git a/CHANGELOG.md\n+release ${input.head} -> ${input.base}\n` });
+    // A branch-to-branch PR (e.g. develop → main) contains every PR merged into head but not yet into base.
+    const inBase = new Set(repo.merged.get(input.base) ?? []);
+    const included = (repo.merged.get(input.head) ?? []).filter((n) => !inBase.has(n)).map((n) => repo.prs.get(n)!.diff);
+    const diff = [...included, `diff --git a/CHANGELOG.md b/CHANGELOG.md\n+release ${input.head} -> ${input.base}\n`].join("");
+    const pr = this.addPr(repo, { ...input, draft: input.draft ?? false, author: this.viewer.login, linkedIssues: [], diff });
     this.setChecks(r, pr.headSha, "success");
     return { ...pr };
   }
@@ -275,6 +303,7 @@ export class InMemoryGitHub implements GitHubPort {
     pr.merged = true;
     pr.state = "closed";
     repo.branches.set(pr.baseRef, mergeSha);
+    repo.merged.set(pr.baseRef, [...new Set([...(repo.merged.get(pr.baseRef) ?? []), ...(repo.merged.get(pr.headRef) ?? []), pr.number])]);
     for (const i of pr.linkedIssues) {
       const issue = repo.issues.get(i);
       if (issue) issue.state = "closed";
@@ -290,10 +319,11 @@ export class InMemoryGitHub implements GitHubPort {
     const isProd = branch === repo.info.defaultBranch;
     const env = isProd ? "production" : "staging";
     const needsApproval = isProd && (repo.environments.get("production")?.reviewerUserIds.length ?? 0) > 0;
+    const id = this.runSeq++;
     const run: WorkflowRunInfo = {
-      id: this.runSeq++,
+      id,
       name: `deploy-${env}`,
-      url: `${repo.info.url}/actions/runs/${this.runSeq}`,
+      url: `${repo.info.url}/actions/runs/${id}`,
       status: needsApproval ? "waiting" : "completed",
       conclusion: needsApproval ? null : "success",
       branch,

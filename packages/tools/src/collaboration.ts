@@ -172,18 +172,22 @@ export const collaborationTools: Record<string, Factory> = {
     defineAgentTool({
       name: "create_initiative",
       description:
-        "Create an initiative from a CEO directive. This starts the product lifecycle: you will be assigned the intake stage (charter + roadmap) right away. Optionally name the product (created if new).",
+        "Create an initiative from a CEO directive that asks for new work (never for questions or status requests). This starts the product lifecycle: you will be assigned the intake stage (charter + roadmap) right away. Always set a total budget cap; without one the default cap applies.",
       schema: z.object({
-        title: z.string().min(3).max(160),
+        title: z.string().min(3).max(60).describe("Short name (≤ 60 characters), e.g. 'InvoiceLite client portal'"),
         summary: z.string().min(10),
-        productName: z.string().optional(),
+        productName: z
+          .string()
+          .optional()
+          .describe("Product the directive builds or extends (existing name, or a new product). Omit for research/strategy work: no repository stages."),
         targetDate: z.string().optional().describe("ISO date"),
-        budgetCredits: z.number().positive().optional(),
+        budgetCredits: z.number().positive().optional().describe("Total AI-credit cap for the whole initiative (convert per-week/month budgets with the timeline)"),
         skipStages: z.array(z.enum(LIFECYCLE_STAGES)).optional(),
       }),
       handler: async (i) => {
         const r = await s.createInitiative(c, i);
-        return `Initiative created (${r.initiativeId}). The intake stage has been assigned to you.`;
+        const budget = `${r.budgetCredits} credits${r.defaultBudget ? " (default cap: the directive named no budget — tell the CEO you applied it)" : ""}`;
+        return `Initiative created (${r.initiativeId}). Total budget cap: ${budget}. Product: ${r.productName ?? "none (repository stages are skipped)"}. The intake stage has been assigned to you.`;
       },
     }),
 

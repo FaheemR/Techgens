@@ -1,4 +1,5 @@
 import type { FakeAgentRuntime, FakeTurnContext } from "@techgens/runtime";
+import { deriveTitle, isQuestion, parseBudget } from "./directives";
 
 /**
  * Scripted behaviour for every role so Techgens can run end-to-end without spending AI credits (demo mode and the
@@ -16,19 +17,26 @@ const approved = (ctx: FakeTurnContext) => ctx.prompt.includes("The CEO APPROVED
 const changesRequested = (ctx: FakeTurnContext) => ctx.prompt.includes("REQUESTED CHANGES");
 const rejected = (ctx: FakeTurnContext) => ctx.prompt.includes("The CEO REJECTED");
 const delegatedDone = (ctx: FakeTurnContext) => ctx.prompt.startsWith("Your delegated work has finished");
-
-function deriveTitle(directive: string): { title: string; product?: string } {
-  const product = /\b(?:[Bb]uild|[Ll]aunch|[Cc]reate|[Ss]hip)\s+([A-Z][\w-]+)/.exec(directive)?.[1];
-  const sentence = directive.split(/[.:\n]/)[0]!.trim();
-  return { title: (product ? `${product} MVP` : sentence).slice(0, 70), product };
-}
+/** The stage restarted after the CEO rejected its gate (LifecycleService.resume): propose a different approach. */
+const restartedAfterRejection = (ctx: FakeTurnContext) => ctx.prompt.includes("The CEO rejected the previous proposal");
+const quotedFeedback = (ctx: FakeTurnContext) =>
+  ctx.prompt
+    .split("\n")
+    .filter((l) => l.startsWith("> "))
+    .map((l) => l.slice(2))
+    .join(" ")
+    .trim();
 
 export function installDemoScripts(rt: FakeAgentRuntime, options: { paceMs?: number } = {}): FakeAgentRuntime {
   const pace = () => (options.paceMs ? new Promise((r) => setTimeout(r, options.paceMs)) : Promise.resolve());
 
   async function writeDocs(ctx: FakeTurnContext, docs: Array<{ kind: string; title: string; body: string }>): Promise<string[]> {
     const ids: string[] = [];
-    const revision = changesRequested(ctx) ? `\n\n## Revision\nAddressed CEO feedback:\n> ${ctx.prompt.split("\n").slice(2, 4).join(" ").trim()}` : "";
+    const revision = changesRequested(ctx)
+      ? `\n\n## Revision\nAddressed CEO feedback:\n> ${ctx.prompt.split("\n").slice(2, 4).join(" ").trim()}`
+      : restartedAfterRejection(ctx)
+        ? `\n\n## Revised approach\nThe CEO rejected the previous proposal. This version takes a different approach to address the feedback:\n> ${quotedFeedback(ctx)}`
+        : "";
     for (const d of docs) {
       const res = await ctx.callTool("write_document", { kind: d.kind, title: d.title, content: `# ${d.title}\n\n${d.body}${revision}` });
       const id = uuidOf(res);
@@ -44,7 +52,10 @@ export function installDemoScripts(rt: FakeAgentRuntime, options: { paceMs?: num
     if (rejected(ctx)) return void (await ctx.callTool("complete_task", { summary: `${label} was rejected; stopping.`, outcome: "blocked" }));
     if (before && !changesRequested(ctx)) await before();
     const ids = await writeDocs(ctx, docs());
-    await ctx.callTool("request_approval", { kind: gate, title: `${label} — ${initiativeTitle(ctx)}`, summary: `${label} is ready for your review. Key points are summarised at the top of each document.`, documentIds: ids });
+    const summary = restartedAfterRejection(ctx)
+      ? `Revised ${label.toLowerCase()} after your rejection: a different approach that addresses your feedback ("${quotedFeedback(ctx)}"). Key points are summarised at the top of each document.`
+      : `${label} is ready for your review. Key points are summarised at the top of each document.`;
+    await ctx.callTool("request_approval", { kind: gate, title: `${label} — ${initiativeTitle(ctx)}`, summary, documentIds: ids });
   }
 
   const doc = (kind: string, title: string, body: string) => ({ kind, title, body });
@@ -55,15 +66,18 @@ export function installDemoScripts(rt: FakeAgentRuntime, options: { paceMs?: num
   on("chief-of-staff", async (ctx) => {
     if (ctx.labels.kind === "consult") return ctx.say("From the executive side: prioritise the smallest MVP that proves the value hypothesis, within budget.");
     if (ctx.labels.kind === "chat") {
-      if (/\b(status|progress|update|where are we)\b/i.test(ctx.prompt)) {
+      // Questions get a short answer and never create work.
+      if (isQuestion(ctx.prompt)) {
         const status = await ctx.callTool("get_status", {});
-        return ctx.say(`Here's where we stand:\n\n${status}`);
+        return ctx.say(`Here's where we stand:\n\n${status.replace(/^# .*\n/, "").trim()}`);
       }
       if (ctx.prompt.trim().length < 25) return ctx.say("Understood. Tell me what you'd like the company to build — ideally with a target date and a budget.");
-      const { title, product } = deriveTitle(ctx.prompt);
-      const budget = Number(/budget(?: of)? (\d+(?:\.\d+)?) credits/i.exec(ctx.prompt)?.[1] ?? NaN);
-      await ctx.callTool("create_initiative", { title, summary: ctx.prompt.trim(), ...(product ? { productName: product } : {}), ...(budget > 0 ? { budgetCredits: budget } : {}) });
-      return ctx.say(`On it. I opened the initiative **${title}** and started intake — I'll draft the charter and roadmap for your approval.`);
+      const products = /^Products: (.+)$/m.exec(await ctx.callTool("get_status", {}))?.[1]?.split("; ").filter((p) => p !== "none yet") ?? [];
+      const { title, product, existingProduct } = deriveTitle(ctx.prompt, products);
+      const budget = parseBudget(ctx.prompt);
+      await ctx.callTool("create_initiative", { title, summary: ctx.prompt.trim(), budgetCredits: budget.credits, ...(product ? { productName: product } : {}) });
+      const scope = !product ? "" : !existingProduct ? ` (new product **${product}**)` : title.includes(product) ? "" : ` for **${product}**`;
+      return ctx.say(`On it. I opened the initiative **${title}**${scope} and started intake — I'll draft the charter and roadmap for your approval. ${budget.explanation}`);
     }
     if (ctx.labels.kind === "routine") {
       const status = await ctx.callTool("get_status", {});
@@ -189,7 +203,12 @@ export function installDemoScripts(rt: FakeAgentRuntime, options: { paceMs?: num
   on("devops-engineer", async (ctx) => {
     if (approved(ctx)) return void (await ctx.callTool("complete_task", { summary: "Production deployment approved and rolling out." }));
     await ctx.callTool("get_deployments", { environment: "production" });
-    await ctx.callTool("request_approval", { kind: "prod_deploy", title: `Deploy ${initiativeTitle(ctx)} to production`, summary: "Release merged; deploy-production run is waiting. Rollback: shift traffic to the previous revision." });
+    await ctx.callTool("request_approval", {
+      kind: "prod_deploy",
+      title: `Deploy ${initiativeTitle(ctx)} to production`,
+      summary: "Release merged and verified on staging; the deploy-production run is waiting for your approval.",
+      payload: { rollback: "Shift 100% of traffic back to the previous Container Apps revision (kept warm for 24 h); no data migrations to revert." },
+    });
   });
 
   on("sre", async (ctx) => {

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import type { ApprovalSummaryDTO, DashboardDTO, InitiativeDetailDTO, OrgDTO, SettingsDTO, SystemInfo, ThreadDTO } from "@techgens/core";
+import type { ApprovalSummaryDTO, DashboardDTO, DecisionDTO, InitiativeDetailDTO, InitiativeSummaryDTO, LiveEvent, OrgDTO, SettingsDTO, SystemInfo, ThreadDTO, WorkItemDTO } from "@techgens/core";
 import type { DbHandle } from "@techgens/db";
 import { createTestDb } from "@techgens/db/testing";
 import { buildServer } from "../src/api/server";
@@ -77,6 +77,36 @@ describe("HTTP API", () => {
     expect(ini.decisions.some((d) => d.summary.includes("CEO approved"))).toBe(true);
     const docs = await get<unknown[]>(`/api/documents?q=${encodeURIComponent("competitor")}`);
     expect(docs.length).toBeGreaterThan(0);
+  });
+
+  it("keeps initiative work counts in line with the work items list", async () => {
+    const [ini] = await get<InitiativeSummaryDTO[]>("/api/initiatives");
+    const items = await get<WorkItemDTO[]>(`/api/work-items?initiativeId=${ini!.id}`);
+    expect(items.some((w) => w.kind === "stage")).toBe(true);
+    expect(ini!.workItems).toMatchObject({ total: items.length, done: items.filter((w) => w.status === "done").length, cancelled: 0 });
+  });
+
+  it("pauses and resumes an initiative with a visible reason", async () => {
+    const [ini] = await get<InitiativeSummaryDTO[]>("/api/initiatives");
+    const paused = (await server.inject({ method: "POST", url: `/api/initiatives/${ini!.id}/pause` })).json() as InitiativeDetailDTO;
+    expect(paused).toMatchObject({ status: "paused", statusReason: "Paused by the CEO" });
+    const resumed = (await server.inject({ method: "POST", url: `/api/initiatives/${ini!.id}/resume` })).json() as InitiativeDetailDTO;
+    expect(resumed).toMatchObject({ status: "active", statusReason: null, pendingApprovals: 1 });
+  });
+
+  it("records every gate the CEO switches on or off", async () => {
+    const put = (gatePolicy: Record<string, boolean>) => server.inject({ method: "PUT", url: "/api/settings", payload: { gatePolicy } });
+    const off = await put({ prod_deploy: false, spec: true });
+    expect(off.statusCode).toBe(200);
+    expect((off.json() as SettingsDTO).gatePolicy).toMatchObject({ prod_deploy: false, spec: true });
+    await put({ prod_deploy: true });
+    const expected = ["CEO turned on the Production deploy gate", "CEO turned off the Production deploy gate"];
+    const decisions = (await get<DecisionDTO[]>("/api/decisions")).filter((d) => d.initiativeId === null);
+    expect(decisions.map((d) => d.summary)).toEqual(expected);
+    expect(decisions[1]).toMatchObject({ type: "change", actorType: "ceo", actorName: "CEO", details: expect.stringMatching(/approved automatically/) });
+    const events = (await get<LiveEvent[]>("/api/events?limit=50")).filter((e) => e.type === "decision.recorded");
+    expect(events.map((e) => e.summary)).toEqual(expected);
+    expect(events[1]).toMatchObject({ actorType: "ceo", subjectType: "settings", data: { gate: "prod_deploy", enabled: false } });
   });
 
   it("pauses and resumes all agents", async () => {
