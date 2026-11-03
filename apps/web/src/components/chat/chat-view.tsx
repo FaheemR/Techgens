@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import type { AgentDTO, MessageDTO, ThreadDTO } from "@techgens/core";
 import { Lightbulb, MessageSquarePlus, MessagesSquare, Sparkles } from "lucide-react";
+import { overrunScopeLabel } from "@/components/approvals/budget-grant";
 import { AgentAvatar } from "@/components/common/agent-avatar";
 import { QueryView } from "@/components/common/query-view";
 import { usePauseMutation } from "@/components/layout/pause-toggle";
@@ -245,7 +246,9 @@ export function ChatView() {
       ? {
           ...facts,
           title: blockingApproval.data
-            ? approvalHeadline(blockingApproval.data.kind, blockingApproval.data.title)
+            ? blockingApproval.data.kind === "budget_overrun"
+              ? `Budget overrun · ${overrunScopeLabel(blockingApproval.data) ?? blockingApproval.data.title}`
+              : approvalHeadline(blockingApproval.data.kind, blockingApproval.data.title)
             : null,
         }
       : facts;

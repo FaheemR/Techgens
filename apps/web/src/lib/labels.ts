@@ -82,12 +82,15 @@ export const APPROVAL_STATUS_TONE: Record<ApprovalStatus, Tone> = {
   cancelled: "neutral",
 };
 
-/** CEO-facing names for approval states. `cancelled` = withdrawn because its initiative was cancelled. */
+/**
+ * CEO-facing names for approval *states*: `changes_requested` items wait "In revision" until the team resubmits, and
+ * `cancelled` ones were withdrawn because their initiative was cancelled.
+ */
 export const APPROVAL_STATUS_LABEL: Record<ApprovalStatus, string> = {
   pending: "Pending",
   approved: "Approved",
   rejected: "Rejected",
-  changes_requested: "Changes requested",
+  changes_requested: "In revision",
   cancelled: "Withdrawn",
 };
 
@@ -96,6 +99,52 @@ export function approvalStatusLabel(status: string): string {
     APPROVAL_STATUS_LABEL[status as ApprovalStatus] ??
     status.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())
   );
+}
+
+/** Names for *decisions* in an approval's history ("Changes requested" is what the CEO did, not a state). */
+export function approvalOutcomeLabel(outcome: string): string {
+  return outcome === "changes_requested" ? "Changes requested" : approvalStatusLabel(outcome);
+}
+
+const ACRONYMS: Record<string, string> = {
+  pr: "PR",
+  prs: "PRs",
+  url: "URL",
+  urls: "URLs",
+  id: "ID",
+  ids: "IDs",
+  ci: "CI",
+  cd: "CD",
+  sha: "SHA",
+  api: "API",
+  qa: "QA",
+  ux: "UX",
+  ui: "UI",
+  prd: "PRD",
+  adr: "ADR",
+  ceo: "CEO",
+  sla: "SLA",
+  slo: "SLO",
+  sso: "SSO",
+  dns: "DNS",
+  tls: "TLS",
+  kpi: "KPI",
+  okr: "OKR",
+};
+
+/**
+ * Human label for a camelCase/snake_case payload key that keeps acronyms: "releasePrUrl" → "Release PR URL",
+ * "commitSha" → "Commit SHA", "ciStatus" → "CI status".
+ */
+export function humanizeKey(key: string): string {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[\s_.-]+/)
+    .filter(Boolean)
+    .map((word) => ACRONYMS[word.toLowerCase()] ?? word.toLowerCase());
+  const text = words.join(" ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** Gate label for use mid-sentence: "Reject vision & roadmap", "Reject product spec (PRD)". */

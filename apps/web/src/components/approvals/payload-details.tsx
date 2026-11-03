@@ -14,8 +14,9 @@ import {
 import { MarkdownView } from "@/components/common/markdown";
 import { Badge } from "@/components/ui/badge";
 import { credits, formatDateTime, humanize, relativeTime } from "@/lib/format";
+import { humanizeKey } from "@/lib/labels";
 import { asNumber, asString, cn, isRecord, isUrl } from "@/lib/utils";
-import { formatWindowEnd } from "./budget-grant";
+import { formatWindowEnd, overrunScopeLabel } from "./budget-grant";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -43,7 +44,7 @@ function hashNumber(value: unknown): string {
 const LINK_LABELS: Record<string, string> = {
   prUrl: "View pull request",
   pullRequestUrl: "View pull request",
-  releasePrUrl: "View release pull request",
+  releasePrUrl: "View release PR",
   runUrl: "View workflow run",
   workflowRunUrl: "View workflow run",
   deploymentUrl: "View deployment",
@@ -68,30 +69,35 @@ const FIELD_LABELS: Record<string, string> = {
   runId: "Workflow run ID",
 };
 
+/** Payload key → label that keeps acronyms: "releasePrNumber" → "Release PR", "commitSha" → "Commit SHA". */
 function labelFor(key: string): string {
   if (FIELD_LABELS[key]) return FIELD_LABELS[key];
-  return humanize(
-    key
-      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-      .replace(/ url$/i, "")
-      .toLowerCase(),
+  // A number key names the thing it numbers ("#8" is shown as the value).
+  if (/.Number$/.test(key)) return humanizeKey(key.replace(/Number$/, ""));
+  if (/.Url$/.test(key)) return humanizeKey(key.replace(/Url$/, ""));
+  return humanizeKey(key);
+}
+
+/** The number key shown on a link: "releasePrUrl" → "releasePrNumber", "runUrl" → "runNumber"/"runId". */
+function numberKeyFor(urlKey: string, payload: Record<string, unknown>): string | null {
+  const base = urlKey.replace(/Url$/, "");
+  const candidates =
+    urlKey === "runUrl" || urlKey === "workflowRunUrl"
+      ? ["runNumber", "runId"]
+      : urlKey === "prUrl" || urlKey === "pullRequestUrl"
+        ? ["prNumber", "pullRequestNumber"]
+        : [`${base}Number`];
+  return (
+    candidates.find(
+      (k) => typeof payload[k] === "number" || (typeof payload[k] === "string" && payload[k]),
+    ) ?? null
   );
 }
 
 function linkLabel(key: string, payload: Record<string, unknown>): string {
-  const base = LINK_LABELS[key] ?? `Open ${labelFor(key).toLowerCase()}`;
-  if (key === "prUrl" || key === "pullRequestUrl" || key === "releasePrUrl") {
-    const n = payload.prNumber ?? payload.pullRequestNumber;
-    return n !== undefined && n !== null ? `${base} ${hashNumber(n)}` : base;
-  }
-  if (key === "runUrl" || key === "workflowRunUrl") {
-    const n = payload.runNumber ?? payload.runId;
-    return typeof n === "number" ? `${base} ${hashNumber(n)}` : base;
-  }
-  if (key === "issueUrl" && payload.issueNumber !== undefined) {
-    return `${base} ${hashNumber(payload.issueNumber)}`;
-  }
-  return base;
+  const base = LINK_LABELS[key] ?? `Open ${labelFor(key).replace(/^\w/, (c) => c.toLowerCase())}`;
+  const numberKey = numberKeyFor(key, payload);
+  return numberKey ? `${base} ${hashNumber(payload[numberKey])}` : base;
 }
 
 type CheckState = "pass" | "fail" | "pending" | "neutral";
@@ -281,6 +287,9 @@ const HANDLED = new Set([
   "spentCredits",
   "windowEndsAt",
   "suggestedExtraCredits",
+  "grantedCredits",
+  "grantedExtraCredits",
+  "stagingEvidence",
   "runNumber",
 ]);
 
@@ -300,6 +309,10 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
 
   const links = entries.filter(([, v]) => isUrl(v)) as Array<[string, string]>;
   const linked = new Set(links.map(([k]) => k));
+  // "#8" is part of "View release PR #8"; don't repeat it as a field.
+  const onLinks = new Set(
+    links.map(([k]) => numberKeyFor(k, payload)).filter((k): k is string => k !== null),
+  );
   const hasRunLink = linked.has("runUrl") || linked.has("workflowRunUrl");
   const hasPrLink = linked.has("prUrl") || linked.has("pullRequestUrl") || linked.has("releasePrUrl");
   // A numeric workflow run id reads as a run number ("Workflow run #1003"), shown on the link or in the release block.
@@ -318,8 +331,8 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
       !isUrl(v) &&
       !technicalKeys.has(k) &&
       !HANDLED.has(k) &&
-      !(k === "runId" && typeof v === "number") &&
-      !(k === "issueNumber" && linked.has("issueUrl")),
+      !onLinks.has(k) &&
+      !(k === "runId" && typeof v === "number"),
   );
 
   const prTitle = asString(payload.prTitle);
@@ -340,7 +353,10 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
   const version =
     asString(payload.version) ?? (typeof payload.version === "number" ? String(payload.version) : undefined);
   const stagingVerified = typeof payload.stagingVerified === "boolean" ? payload.stagingVerified : undefined;
+  const stagingEvidence = asString(payload.stagingEvidence);
   const limit = asNumber(payload.limitCredits);
+  const grantedBefore = asNumber(payload.grantedCredits) ?? 0;
+  const grantedNow = asNumber(payload.grantedExtraCredits);
   const spent = asNumber(payload.spentCredits);
   const suggested = asNumber(payload.suggestedExtraCredits);
   const scopeName = asString(payload.scopeName);
@@ -390,6 +406,7 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
     version ||
     sha ||
     stagingVerified !== undefined ||
+    stagingEvidence ||
     (runNumber !== undefined && !hasRunLink)
   ) {
     blocks.push(
@@ -424,6 +441,7 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
             </Badge>
           ) : null}
         </span>
+        {stagingEvidence ? <p className="mt-1.5 text-muted">Staging: {stagingEvidence}</p> : null}
       </Block>,
     );
   }
@@ -463,11 +481,14 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
       <Block key="budget" title="Spend">
         <p>
           {spent !== undefined ? `Spent ${credits(spent)}` : "Budget"}
-          {limit !== undefined ? ` of ${credits(limit)} credits` : ""}
+          {limit !== undefined ? ` of ${credits(limit + grantedBefore)} credits` : ""}
+          {grantedBefore > 0 ? ` (incl. ${credits(grantedBefore)} granted earlier)` : ""}
           {scopeName || period ? (
             <span className="text-muted">
               {" "}
-              · {[scopeName, period ? `${period} budget` : null].filter(Boolean).join(" · ")}
+              ·{" "}
+              {overrunScopeLabel({ title: "", summary: "", payload }) ??
+                [scopeName, period ? `${period} budget` : null].filter(Boolean).join(" · ")}
             </span>
           ) : null}
         </p>
@@ -476,7 +497,9 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
             Window resets {formatWindowEnd(new Date(windowEndsAt))} · {relativeTime(windowEndsAt)}
           </p>
         ) : null}
-        {suggested !== undefined ? (
+        {grantedNow !== undefined ? (
+          <p className="text-emerald-200">Granted: {credits(grantedNow)} credits for this window</p>
+        ) : suggested !== undefined ? (
           <p className="text-muted">Suggested grant: {credits(suggested)} credits</p>
         ) : null}
       </Block>,
