@@ -1,5 +1,5 @@
 {
-  "id": "9d8346e6-17a2-4873-8796-08c8e9e61c88",
+  "id": "646e120b-7fab-4de6-ba09-bc5008287ea5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -696,6 +696,13 @@
           "type": "double precision",
           "primaryKey": false,
           "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
         },
         "created_at": {
           "name": "created_at",
@@ -1441,6 +1448,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'work'"
+        },
+        "thread_id": {
+          "name": "thread_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",

@@ -1,0 +1,73 @@
+# Techgens — local, single-user deployment.
+#   docker compose up -d --build          # Copilot-powered agents (connect GitHub in Settings)
+#   AGENT_RUNTIME=fake docker compose up   # demo mode: scripted agents + simulated GitHub, no AI credits
+# Ports are bound to 127.0.0.1 only: the API has no login and must not be exposed to a network.
+name: techgens
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: techgens
+      POSTGRES_PASSWORD: techgens
+      POSTGRES_DB: techgens
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U techgens"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: apps/orchestrator/Dockerfile
+    environment:
+      DATABASE_URL: postgres://techgens:techgens@postgres:5432/techgens
+      TECHGENS_PUBLIC_URL: ${TECHGENS_PUBLIC_URL:-http://localhost:4000}
+      TECHGENS_WEB_URL: ${TECHGENS_WEB_URL:-http://localhost:3000}
+      TECHGENS_SECRET_KEY: ${TECHGENS_SECRET_KEY:-}
+      AGENT_RUNTIME: ${AGENT_RUNTIME:-copilot}
+      GITHUB_TOKEN_BOOTSTRAP: ${GITHUB_TOKEN_BOOTSTRAP:-}
+      COPILOT_RUNTIME_URL: ${COPILOT_RUNTIME_URL:-}
+      COPILOT_CONNECTION_TOKEN: ${COPILOT_CONNECTION_TOKEN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - techgens-data:/data
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${TECHGENS_PUBLIC_URL:-http://localhost:4000}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - orchestrator
+    restart: unless-stopped
+
+  # Optional: run the Copilot runtime as a separate headless server (official image) instead of the runtime bundled
+  # with the SDK. Enable with: COPILOT_RUNTIME_URL=copilot-runtime:4321 docker compose --profile external-runtime up
+  copilot-runtime:
+    image: ghcr.io/github/copilot-cli:latest
+    profiles: ["external-runtime"]
+    environment:
+      # The image refuses to start without a connection token (its entrypoint checks it).
+      COPILOT_CONNECTION_TOKEN: ${COPILOT_CONNECTION_TOKEN:-}
+      COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
+    expose:
+      - "4321"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  techgens-data:

@@ -11,7 +11,12 @@ const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 export function parseRoleMarkdown(markdown: string, origin = "role"): RoleDefinition {
   const match = FRONTMATTER.exec(markdown);
   if (!match) throw new Error(`${origin}: missing YAML frontmatter`);
-  const raw = parseYaml(match[1]!) as unknown;
+  let raw: unknown;
+  try {
+    raw = parseYaml(match[1]!);
+  } catch (err) {
+    throw new Error(`${origin}: invalid YAML frontmatter — ${(err as Error).message.split("\n")[0]}`);
+  }
   const parsed = roleFrontmatterSchema.safeParse(raw);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");

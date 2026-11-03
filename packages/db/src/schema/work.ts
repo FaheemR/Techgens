@@ -102,6 +102,8 @@ export const jobs = pgTable(
     parentJobId: uuid("parent_job_id").references((): AnyPgColumn => jobs.id, { onDelete: "set null" }),
     initiativeId: uuid("initiative_id").references(() => initiatives.id, { onDelete: "set null" }),
     kind: text("kind").$type<"work" | "chat" | "routine">().notNull().default("work"),
+    /** Directive chat thread this job answers (kind = chat). */
+    threadId: uuid("thread_id"),
     status: text("status").$type<JobStatus>().notNull().default("queued"),
     waitReason: text("wait_reason").$type<WaitReason>(),
     waitState: jsonb("wait_state").$type<JobWaitState>().notNull().default({}),

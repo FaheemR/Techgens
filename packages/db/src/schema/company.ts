@@ -41,6 +41,13 @@ export interface AzureProductConfig {
   productionClientId?: string;
 }
 
+export interface InitiativeMetadata {
+  releasePrNumber?: number;
+  releasePrUrl?: string;
+  productionRunId?: number;
+  pausedReason?: string;
+}
+
 /** Single-row table holding company-level strategy. */
 export const company = pgTable("company", {
   id: text("id").primaryKey().default("default"),
@@ -86,6 +93,8 @@ export const initiatives = pgTable(
     skipStages: jsonb("skip_stages").$type<LifecycleStage[]>().notNull().default([]),
     targetDate: timestamp("target_date", { withTimezone: true }),
     budgetCredits: doublePrecision("budget_credits"),
+    /** Delivery bookkeeping (release PR number, production run id, …). */
+    metadata: jsonb("metadata").$type<InitiativeMetadata>().notNull().default({}),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     completedAt: timestamp("completed_at", { withTimezone: true }),

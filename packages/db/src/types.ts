@@ -27,5 +27,5 @@ export type Notification = typeof s.notifications.$inferSelect;
 export type Routine = typeof s.routines.$inferSelect;
 export type Deployment = typeof s.deployments.$inferSelect;
 export type Incident = typeof s.incidents.$inferSelect;
-export type { AzureProductConfig } from "./schema/company";
+export type { AzureProductConfig, InitiativeMetadata } from "./schema/company";
 export type { CodingStatus, JobResult, JobWaitState } from "./schema/work";

@@ -77,6 +77,7 @@ CREATE TABLE "initiatives" (
 	"skip_stages" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"target_date" timestamp with time zone,
 	"budget_credits" double precision,
+	"metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"completed_at" timestamp with time zone
@@ -170,6 +171,7 @@ CREATE TABLE "jobs" (
 	"parent_job_id" uuid,
 	"initiative_id" uuid,
 	"kind" text DEFAULT 'work' NOT NULL,
+	"thread_id" uuid,
 	"status" text DEFAULT 'queued' NOT NULL,
 	"wait_reason" text,
 	"wait_state" jsonb DEFAULT '{}'::jsonb NOT NULL,
