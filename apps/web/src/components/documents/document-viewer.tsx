@@ -15,7 +15,7 @@ import { Select } from "@/components/ui/input";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { formatDateTime, humanize, relativeTime } from "@/lib/format";
 import { documentKindLabel } from "@/lib/labels";
-import { useNow, useQueryParams } from "@/lib/hooks";
+import { useDocumentTitle, useNow, useQueryParams } from "@/lib/hooks";
 import { useDocument } from "@/lib/queries";
 import { cn, downloadText } from "@/lib/utils";
 
@@ -50,6 +50,7 @@ function DocumentBody({
   onVersion: (version: number | null) => void;
 }) {
   const now = useNow();
+  useDocumentTitle(`${doc.title} · Documents · Techgens`);
   const versions = [...doc.versions].sort((a, b) => b.version - a.version);
   const latest = versions[0]?.version ?? doc.version;
   const shown = selectedVersion ?? doc.version;
@@ -110,11 +111,18 @@ function DocumentBody({
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <Card className={cn("min-w-0 transition-opacity", loading && "opacity-70")}>
+          <h2 className="sr-only">Document content</h2>
           <CardContent className="px-5 py-6 sm:px-8">
             {doc.content.trim() ? (
-              <MarkdownView content={doc.content} className="mx-auto max-w-3xl" />
+              // The page H1 is the title: drop the document's own copy of it and nest its sections below.
+              <MarkdownView
+                content={doc.content}
+                className="mx-auto max-w-3xl"
+                headingOffset={1}
+                dropTitle={doc.title}
+              />
             ) : (
               <p className="text-sm text-subtle">This version is empty.</p>
             )}

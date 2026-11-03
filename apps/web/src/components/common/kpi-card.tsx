@@ -30,7 +30,7 @@ export function KpiCard({
         <p className="text-xs font-medium uppercase tracking-wide text-subtle">{label}</p>
         <Icon aria-hidden className={cn("size-4", TONE_TEXT[tone])} />
       </div>
-      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-fg">{value}</p>
+      <p className="mt-2 text-xl font-semibold tabular-nums tracking-tight text-fg">{value}</p>
       {sub ? <div className="mt-1 text-xs text-muted">{sub}</div> : null}
       {children ? <div className="mt-3">{children}</div> : null}
       {href ? (

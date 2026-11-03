@@ -40,7 +40,7 @@ export function Wordmark({ collapsed = false }: { collapsed?: boolean }) {
       <LogoMark />
       <div className={cn("leading-none", collapsed && "sr-only")}>
         <div className="text-[15px] font-semibold tracking-tight text-fg">Techgens</div>
-        <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-subtle">
+        <div className="mt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-subtle">
           Command Center
         </div>
       </div>

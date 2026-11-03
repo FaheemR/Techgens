@@ -1,5 +1,3 @@
-import { formatCredits } from "@techgens/core";
-
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -80,15 +78,26 @@ export function formatDuration(
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
-/** Credits with the shared formatter; "—" for missing values. */
+const CREDIT_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+
+/**
+ * AI credits for display: thousands separators, at most two decimals and no trailing zeros ("3,000", "12.5", "0.05");
+ * tiny positive amounts read "< 0.01" rather than "0" or "0.0020". "—" for missing values.
+ */
 export function credits(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  return formatCredits(value);
+  if (value > 0 && value < 0.005) return "< 0.01";
+  const text = CREDIT_FORMAT.format(value);
+  return text === "-0" ? "0" : text;
 }
 
+/** "42%"; a tiny non-zero share reads "< 1%" instead of rounding to "0%". */
 export function percent(ratio: number, digits = 0): string {
   if (!Number.isFinite(ratio)) return "—";
-  return `${(ratio * 100).toFixed(digits)}%`;
+  const pct = ratio * 100;
+  const step = 1 / 10 ** digits;
+  if (pct > 0 && pct < step / 2) return `< ${step}%`;
+  return `${pct.toFixed(digits)}%`;
 }
 
 export function ratio(value: number | null | undefined, total: number | null | undefined): number {

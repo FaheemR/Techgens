@@ -33,7 +33,7 @@ export function Badge({
           {pulse ? (
             <span
               className={cn(
-                "absolute inline-flex size-full animate-ping rounded-full opacity-75",
+                "absolute inline-flex size-full rounded-full opacity-75 motion-safe:animate-ping-brief",
                 TONE_DOT[tone],
               )}
             />
@@ -49,10 +49,13 @@ export function Badge({
 export function CountBadge({
   count,
   tone = "warning",
+  max = 99,
   className,
 }: {
   count: number;
   tone?: Tone;
+  /** Larger counts render as "{max}+". */
+  max?: number;
   className?: string;
 }) {
   if (count <= 0) return null;
@@ -61,14 +64,14 @@ export function CountBadge({
       className={cn(
         "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
         tone === "danger"
-          ? "bg-rose-500 text-white"
+          ? "bg-danger text-white"
           : tone === "accent"
             ? "bg-accent text-accent-fg"
             : "bg-amber-400 text-amber-950",
         className,
       )}
     >
-      {count > 99 ? "99+" : count}
+      {count > max ? `${max}+` : count}
     </span>
   );
 }

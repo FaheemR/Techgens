@@ -158,7 +158,7 @@ export function JobsPanel({
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`Cancel job ${job.id}`}
+                          aria-label={`Cancel job: ${job.workItemTitle ?? job.prompt.split("\n")[0]}`}
                           title="Cancel"
                           onClick={() => action.mutate({ id: job.id, action: "cancel" })}
                         >
@@ -168,7 +168,7 @@ export function JobsPanel({
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`Retry job ${job.id}`}
+                          aria-label={`Retry job: ${job.workItemTitle ?? job.prompt.split("\n")[0]}`}
                           title="Retry"
                           onClick={() => action.mutate({ id: job.id, action: "retry" })}
                         >

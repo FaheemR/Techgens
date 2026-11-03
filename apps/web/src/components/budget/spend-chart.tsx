@@ -5,6 +5,14 @@ import { cn } from "@/lib/utils";
 
 const DAY = 86_400_000;
 
+/** Axis labels need the precision of the tick step ("0.005", "0.625"), not the "< 0.01" rounding of `credits()`. */
+function tickLabel(value: number, step: number): string {
+  let decimals = 0;
+  while (decimals < 4 && Math.abs(Math.round(step * 10 ** decimals) - step * 10 ** decimals) > 1e-9)
+    decimals++;
+  return value.toLocaleString("en-US", { maximumFractionDigits: decimals });
+}
+
 function niceMax(value: number): number {
   if (value <= 0) return 1;
   const exp = Math.pow(10, Math.floor(Math.log10(value)));
@@ -51,11 +59,11 @@ export function SpendChart({
       <div className="flex h-56">
         <div
           aria-hidden
-          className="flex w-12 flex-col justify-between pr-2 text-right text-[10px] tabular-nums text-subtle"
+          className="flex w-12 flex-col justify-between pr-2 text-right text-[11px] tabular-nums text-subtle"
         >
           {ticks.map((t) => (
             <span key={t} className="-translate-y-1/2 first:translate-y-0 last:translate-y-0">
-              {credits(t)}
+              {tickLabel(t, max / 4)}
             </span>
           ))}
         </div>
@@ -74,7 +82,7 @@ export function SpendChart({
               className="absolute inset-x-0 z-10 border-t border-dashed border-amber-400/70"
               style={{ bottom: `${Math.min(100, (dailyLimit / max) * 100)}%` }}
             >
-              <span className="absolute -top-4 right-1 text-[10px] font-medium text-amber-300">
+              <span className="absolute -top-4 right-1 text-[11px] font-medium text-amber-300">
                 daily limit {credits(dailyLimit)}
               </span>
             </div>
@@ -102,7 +110,7 @@ export function SpendChart({
           </div>
         </div>
       </div>
-      <div aria-hidden className="ml-12 mt-1.5 flex h-4 gap-[2px] px-1 text-[10px] text-subtle">
+      <div aria-hidden className="ml-12 mt-1.5 flex h-4 gap-[2px] px-1 text-[11px] text-subtle">
         {daily.map((d, i) => (
           <span key={d.day} className="relative min-w-0 flex-1">
             {i % labelEvery === 0 ? (

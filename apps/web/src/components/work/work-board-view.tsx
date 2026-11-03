@@ -45,6 +45,7 @@ export function WorkBoardView() {
   const query = useWorkItems(filters);
   const initiatives = useInitiatives();
   const org = useOrg();
+  const initiativeTitles = new Map((initiatives.data ?? []).map((i) => [i.id, i.title]));
 
   async function move(id: string, status: WorkItemStatus) {
     const key = qk.workItems(filters);
@@ -113,7 +114,7 @@ export function WorkBoardView() {
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:flex xl:items-center">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:items-center">
         <div className="relative xl:w-64">
           <label htmlFor="work-search" className="sr-only">
             Search work items
@@ -225,6 +226,7 @@ export function WorkBoardView() {
           return view === "board" ? (
             <KanbanBoard
               items={items}
+              initiativeTitles={filters.initiativeId ? undefined : initiativeTitles}
               columns={showCancelled ? [...BOARD_COLUMNS, "cancelled"] : BOARD_COLUMNS}
               onOpen={(id) => set({ item: id })}
               onMove={(id, status) => void move(id, status)}

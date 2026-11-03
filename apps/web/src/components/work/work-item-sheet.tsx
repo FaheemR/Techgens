@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { JobDTO, Priority, WorkItemDTO, WorkItemStatus } from "@techgens/core";
 import { PRIORITIES, WORK_ITEM_STATUSES } from "@techgens/core";
 import { Bot, ListTree, SquareTerminal } from "lucide-react";
+import { Credits } from "@/components/common/credits";
 import { MarkdownView } from "@/components/common/markdown";
 import { QueryView } from "@/components/common/query-view";
 import { stageShortTitle } from "@/components/common/stages";
@@ -18,7 +19,7 @@ import { Sheet } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/input";
 import { LoadingBlock } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
-import { credits, formatDateTime, humanize, relativeTime } from "@/lib/format";
+import { formatDateTime, humanize, relativeTime } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { WORK_STATUS_LABEL } from "@/lib/labels";
 import { useApiMutation } from "@/lib/mutations";
@@ -227,7 +228,7 @@ function JobsSection({ jobs }: { jobs: JobDTO[] }) {
                   <span className="text-muted"> · {job.kind}</span>
                 </span>
                 <span className="shrink-0 text-xs tabular-nums text-subtle">
-                  {credits(job.spentCredits)} cr · {relativeTime(job.createdAt, now)}
+                  <Credits value={job.spentCredits} /> · {relativeTime(job.createdAt, now)}
                 </span>
               </Link>
             </li>

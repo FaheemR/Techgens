@@ -55,7 +55,7 @@ export function OperationsView() {
         description="Production health: incidents, deployments across environments, and the recurring ceremonies your agents run."
       />
       <IncidentsCard productNames={productNames} />
-      <div className="grid gap-6 2xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
         <DeploymentsCard productNames={productNames} />
         <RoutinesCard />
       </div>
@@ -287,11 +287,9 @@ function IncidentForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** Environments are facts, not states: production gets the informational blue, everything else stays neutral. */
 function environmentTone(env: string): Tone {
-  const e = env.toLowerCase();
-  if (e.startsWith("prod")) return "danger";
-  if (e.startsWith("stag")) return "warning";
-  return "info";
+  return env.toLowerCase().startsWith("prod") ? "info" : "neutral";
 }
 
 function DeploymentsCard({ productNames }: { productNames: Map<string, string> }) {
@@ -443,7 +441,7 @@ function RoutinesCard() {
                       <TD>
                         <Switch
                           checked={routine.enabled}
-                          label={`${routine.enabled ? "Disable" : "Enable"} ${routine.title}`}
+                          label={`Run ${routine.title} on schedule`}
                           disabled={toggle.isPending}
                           onCheckedChange={(enabled) => toggle.mutate({ id: routine.id, enabled })}
                         />

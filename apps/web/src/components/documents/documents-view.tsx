@@ -49,7 +49,7 @@ export function DocumentsView() {
         title="Documents"
         description="The company's knowledge base: charters, research, PRDs, UX specs, architecture, ADRs, test plans, release notes and runbooks."
       />
-      <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem_16rem]">
+      <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_14rem_16rem]">
         <div className="relative">
           <label htmlFor="doc-search" className="sr-only">
             Search documents

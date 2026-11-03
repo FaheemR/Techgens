@@ -28,7 +28,7 @@ import { PageSkeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { eventJobId, eventString, useLiveEventListener } from "@/lib/events";
 import { credits, formatDateTime, formatDuration, formatTime, shortId } from "@/lib/format";
-import { useNow } from "@/lib/hooks";
+import { useDocumentTitle, useNow } from "@/lib/hooks";
 import { TONE_BADGE } from "@/lib/labels";
 import { useJob } from "@/lib/queries";
 import { asNumber, cn, isRecord } from "@/lib/utils";
@@ -84,6 +84,7 @@ function JobTranscript({
   const scrollRef = useRef<HTMLDivElement>(null);
   const active = job.status === "queued" || job.status === "running" || job.status === "waiting";
   const title = job.workItemTitle ?? job.prompt.split("\n")[0] ?? `Job ${shortId(job.id)}`;
+  useDocumentTitle(`${title} · Activity · Techgens`);
   const visibleEvents = events.filter((e) => e.type !== "agent.message_delta");
 
   useLayoutEffect(() => {
@@ -262,7 +263,10 @@ function JobTranscript({
                   <AgentAvatar name={job.agentName} department={job.department} size="sm" />
                   <div className="min-w-0 flex-1 rounded-xl rounded-tl-sm border border-accent/25 bg-surface-2 px-4 py-3">
                     <MarkdownView content={streamText} compact />
-                    <span aria-hidden className="mt-1 inline-block h-4 w-1.5 animate-blink bg-accent" />
+                    <span
+                      aria-hidden
+                      className="mt-1 inline-block h-4 w-1.5 bg-accent motion-safe:animate-blink"
+                    />
                   </div>
                 </li>
               ) : null}
@@ -364,7 +368,9 @@ function TranscriptEntry({
       <li className="ml-11 flex items-center gap-2 text-xs text-subtle">
         <Coins aria-hidden className="size-3.5" />
         <span>
-          {value !== undefined ? `+${credits(value)} credits` : event.summary}
+          {value !== undefined
+            ? `${value >= 0.005 ? "+" : ""}${credits(value)} credits` // tiny amounts read "< 0.01 credits"
+            : event.summary}
           {model ? ` · ${model}` : ""}
           {input !== undefined || output !== undefined
             ? ` · ${input ?? 0} in / ${output ?? 0} out tokens`

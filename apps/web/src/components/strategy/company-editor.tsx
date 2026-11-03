@@ -8,7 +8,7 @@ import { MarkdownView } from "@/components/common/markdown";
 import { QueryView } from "@/components/common/query-view";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Field, Input, Textarea } from "@/components/ui/input";
+import { Field, FieldControl, Input, Textarea } from "@/components/ui/input";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
@@ -119,7 +119,7 @@ function CompanyForm({ company }: { company: CompanyDTO }) {
 
   return (
     <form onSubmit={submit} className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <Card>
           <CardHeader title="Identity" description="Who you are and where you're going" icon={BookOpenText} />
           <CardContent className="space-y-4">
@@ -156,7 +156,7 @@ function CompanyForm({ company }: { company: CompanyDTO }) {
               htmlFor="co-values"
               hint="Press Enter to add. Agents weigh trade-offs against these."
             >
-              <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-border bg-[#0a1019] p-1.5 focus-within:border-accent/70">
+              <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-control bg-[#0a1019] p-1.5 hover:border-subtle focus-within:border-accent/70">
                 {draft.values.map((value) => (
                   <span
                     key={value}
@@ -171,22 +171,25 @@ function CompanyForm({ company }: { company: CompanyDTO }) {
                           draft.values.filter((v) => v !== value),
                         )
                       }
-                      className="rounded p-0.5 text-cyan-200/70 hover:bg-white/10 hover:text-fg"
+                      // 16px icon, 24×24 hit area (WCAG 2.5.8) via the transparent ::after.
+                      className="relative rounded p-0.5 text-cyan-200/70 after:absolute after:-inset-1 after:content-[''] hover:bg-white/10 hover:text-fg"
                       aria-label={`Remove value ${value}`}
                     >
                       <X className="size-3" />
                     </button>
                   </span>
                 ))}
-                <input
-                  id="co-values"
-                  value={valueInput}
-                  onChange={(e) => setValueInput(e.target.value)}
-                  onKeyDown={onValueKey}
-                  onBlur={addValue}
-                  placeholder={draft.values.length ? "Add value…" : "e.g. Customer obsession"}
-                  className="min-w-32 flex-1 bg-transparent px-1.5 py-1 text-sm text-fg outline-none placeholder:text-subtle"
-                />
+                <FieldControl>
+                  <input
+                    id="co-values"
+                    value={valueInput}
+                    onChange={(e) => setValueInput(e.target.value)}
+                    onKeyDown={onValueKey}
+                    onBlur={addValue}
+                    placeholder={draft.values.length ? "Add value…" : "e.g. Customer obsession"}
+                    className="min-w-32 flex-1 bg-transparent px-1.5 py-1 text-sm text-fg outline-none placeholder:text-subtle"
+                  />
+                </FieldControl>
                 <Button
                   variant="ghost"
                   size="icon-sm"

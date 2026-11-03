@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Radio } from "lucide-react";
+import { eventSummary } from "@/components/common/activity-feed";
 import { useLiveEvents } from "@/lib/events";
 import { relativeTime } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
@@ -32,23 +33,26 @@ export function LiveIndicator() {
           : "border-amber-400/25 bg-amber-400/[0.06] text-amber-200",
       )}
       title={
-        latest ? `Latest: ${latest.summary} (${relativeTime(latest.createdAt, now)})` : "Live activity stream"
+        latest
+          ? `Latest: ${eventSummary(latest)} (${relativeTime(latest.createdAt, now)})`
+          : "Live activity stream"
       }
-      aria-label={`Live activity: ${LABELS[status]}${latest ? `. Latest event: ${latest.summary}` : ""}`}
+      aria-label={`Live activity: ${LABELS[status]}${latest ? `. Latest event: ${eventSummary(latest)}` : ""}`}
     >
       <span className="relative flex size-2">
         {open ? (
           <span
             className={cn(
               "absolute inline-flex size-full rounded-full bg-emerald-400 opacity-60",
-              recent ? "animate-ping" : "",
+              // A few pings when events start flowing — not a permanent animation next to the content.
+              recent ? "motion-safe:animate-ping-brief" : "",
             )}
           />
         ) : null}
         <span
           className={cn(
             "relative inline-flex size-2 rounded-full",
-            open ? "bg-emerald-400" : "animate-pulse bg-amber-400",
+            open ? "bg-emerald-400" : "bg-amber-400 motion-safe:animate-pulse-brief",
           )}
         />
       </span>
@@ -74,7 +78,7 @@ export function LiveTicker() {
       aria-live="off"
     >
       <span className="font-mono text-[11px] text-subtle">{relativeTime(latest.createdAt, now)}</span>
-      <span className="truncate">{latest.summary}</span>
+      <span className="truncate">{eventSummary(latest)}</span>
     </p>
   );
 }

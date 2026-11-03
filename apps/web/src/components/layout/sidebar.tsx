@@ -26,7 +26,7 @@ export function NavLinks({
         <div key={group.label}>
           <p
             className={cn(
-              "mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-subtle",
+              "mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-subtle",
               collapsible && "md:sr-only lg:not-sr-only",
             )}
           >
@@ -72,7 +72,7 @@ export function NavLinks({
                           count={badge}
                           className={cn(
                             collapsible &&
-                              "md:absolute md:right-1 md:top-0.5 md:h-4 md:min-w-4 md:px-1 md:text-[10px] lg:static lg:h-5 lg:min-w-5 lg:px-1.5 lg:text-[11px]",
+                              "md:absolute md:right-1 md:top-0.5 md:h-4 md:min-w-4 md:px-1 md:text-[11px] lg:static lg:h-5 lg:min-w-5 lg:px-1.5 lg:text-[11px]",
                           )}
                         />
                         <span className="sr-only">({badge} pending)</span>

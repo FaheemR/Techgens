@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { AgentDetailDTO, AgentDTO, AgentStatus } from "@techgens/core";
 import { Brain, Coins, Cpu, Pause, Play, ScrollText, SquareTerminal, UserPlus, Wrench } from "lucide-react";
+import { Credits } from "@/components/common/credits";
 import { AgentAvatar } from "@/components/common/agent-avatar";
 import { MarkdownView } from "@/components/common/markdown";
 import { QueryView } from "@/components/common/query-view";
@@ -341,7 +342,7 @@ function AgentDetail({ agent }: { agent: AgentDetailDTO }) {
                     {job.workItemTitle ?? job.prompt.slice(0, 80)}
                   </span>
                   <span className="shrink-0 text-xs tabular-nums text-subtle">
-                    {credits(job.spentCredits)} cr · {relativeTime(job.createdAt, now)}
+                    <Credits value={job.spentCredits} /> · {relativeTime(job.createdAt, now)}
                   </span>
                 </Link>
               </li>

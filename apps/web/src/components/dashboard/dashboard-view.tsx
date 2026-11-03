@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { ActivityFeed } from "@/components/common/activity-feed";
 import { AgentAvatar } from "@/components/common/agent-avatar";
+import { Credits } from "@/components/common/credits";
 import { KpiCard } from "@/components/common/kpi-card";
 import { PageHeader } from "@/components/common/page-header";
 import { QueryView } from "@/components/common/query-view";
@@ -148,7 +149,7 @@ function Dashboard({ data }: { data: DashboardDTO }) {
         />
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
           <InitiativesCard initiatives={initiatives} />
           <ActiveJobsCard jobs={activeJobs} />
@@ -252,7 +253,7 @@ function InitiativesCard({ initiatives }: { initiatives: InitiativeSummaryDTO[] 
               <li key={initiative.id}>
                 <Link
                   href={`/initiatives/${initiative.id}`}
-                  className="grid gap-x-6 gap-y-2 px-4 py-3 transition-colors hover:bg-white/[0.025] md:grid-cols-[minmax(0,1fr)_220px]"
+                  className="grid grid-cols-1 gap-x-6 gap-y-2 px-4 py-3 transition-colors hover:bg-white/[0.025] md:grid-cols-[minmax(0,1fr)_220px]"
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -277,15 +278,11 @@ function InitiativesCard({ initiatives }: { initiatives: InitiativeSummaryDTO[] 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-medium text-fg">{stageShortTitle(initiative.stage)}</span>
-                      <span
-                        className={cn(
-                          "tabular-nums",
-                          budgetRatio !== null && budgetRatio >= 1 ? "text-rose-300" : "text-muted",
-                        )}
-                      >
-                        {credits(initiative.spentCredits)}
-                        {initiative.budgetCredits ? ` / ${credits(initiative.budgetCredits)}` : ""} cr
-                      </span>
+                      <Credits
+                        value={initiative.spentCredits}
+                        of={initiative.budgetCredits}
+                        className={budgetRatio !== null && budgetRatio >= 1 ? "text-rose-300" : "text-muted"}
+                      />
                     </div>
                     <StageBar
                       stage={initiative.stage}
@@ -344,7 +341,7 @@ function ActiveJobsCard({ jobs }: { jobs: JobDTO[] }) {
                 </div>
                 <div className="hidden shrink-0 text-right text-xs text-muted sm:block">
                   <div className="tabular-nums">{formatDuration(job.startedAt ?? job.createdAt, now)}</div>
-                  <div className="tabular-nums text-subtle">{credits(job.spentCredits)} cr</div>
+                  <Credits value={job.spentCredits} className="block text-subtle" />
                 </div>
                 <JobStatusBadge status={job.status} />
               </Link>

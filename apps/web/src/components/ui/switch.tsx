@@ -25,8 +25,10 @@ export function Switch({ checked, onCheckedChange, label, id, disabled, classNam
       onClick={() => onCheckedChange(!checked)}
       className={cn(
         "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition-colors",
+        // Invisible 28px-tall hit area around the 20px track (WCAG 2.5.8).
+        "before:absolute before:-inset-y-1 before:inset-x-0 before:content-['']",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50",
-        checked ? "border-accent/60 bg-accent/80" : "border-border-strong bg-surface-3",
+        checked ? "border-accent/60 bg-accent/80" : "border-control bg-surface-3 hover:border-subtle",
         className,
       )}
     >

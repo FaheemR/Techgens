@@ -2,7 +2,7 @@
 
 import { useState, type DragEvent } from "react";
 import type { WorkItemDTO, WorkItemStatus } from "@techgens/core";
-import { Bot } from "lucide-react";
+import { Bot, Rocket } from "lucide-react";
 import { AgentAvatar } from "@/components/common/agent-avatar";
 import { CodingStatusBadge, PriorityBadge } from "@/components/common/status";
 import { humanize } from "@/lib/format";
@@ -20,20 +20,30 @@ export const BOARD_COLUMNS: readonly WorkItemStatus[] = [
 ];
 
 const DRAG_TYPE = "application/x-techgens-work-item";
+/** Done is the busiest column: it shows the most recent cards until the CEO asks for all of them. */
+const DONE_PREVIEW = 10;
+
+function finishedAt(item: WorkItemDTO): number {
+  return Date.parse(item.completedAt ?? item.updatedAt) || 0;
+}
 
 export function KanbanBoard({
   items,
   columns,
   onOpen,
   onMove,
+  initiativeTitles,
 }: {
   items: readonly WorkItemDTO[];
   columns: readonly WorkItemStatus[];
   onOpen: (id: string) => void;
   onMove: (id: string, status: WorkItemStatus) => void;
+  /** Initiative names for the chip on stage cards; omit when every card belongs to the same initiative. */
+  initiativeTitles?: ReadonlyMap<string, string> | undefined;
 }) {
   const [over, setOver] = useState<WorkItemStatus | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
+  const [allDone, setAllDone] = useState(false);
 
   function onDrop(event: DragEvent<HTMLElement>, status: WorkItemStatus) {
     event.preventDefault();
@@ -48,6 +58,9 @@ export function KanbanBoard({
     <div className="flex gap-3 overflow-x-auto pb-3" role="list" aria-label="Work board columns">
       {columns.map((status) => {
         const columnItems = items.filter((i) => i.status === status);
+        if (status === "done") columnItems.sort((a, b) => finishedAt(b) - finishedAt(a));
+        const collapsible = status === "done" && columnItems.length > DONE_PREVIEW;
+        const shown = collapsible && !allDone ? columnItems.slice(0, DONE_PREVIEW) : columnItems;
         return (
           <section
             key={status}
@@ -81,10 +94,15 @@ export function KanbanBoard({
                   {dragging ? "Drop here" : "Nothing here"}
                 </li>
               ) : (
-                columnItems.map((item) => (
+                shown.map((item) => (
                   <li key={item.id}>
                     <WorkCard
                       item={item}
+                      initiativeTitle={
+                        item.kind === "stage" && item.initiativeId
+                          ? initiativeTitles?.get(item.initiativeId)
+                          : undefined
+                      }
                       onOpen={onOpen}
                       dragging={dragging === item.id}
                       onDragStart={(event) => {
@@ -102,6 +120,18 @@ export function KanbanBoard({
                 ))
               )}
             </ul>
+            {collapsible ? (
+              <div className="border-t border-border p-2">
+                <button
+                  type="button"
+                  onClick={() => setAllDone((v) => !v)}
+                  aria-expanded={allDone}
+                  className="w-full rounded-md px-2 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-white/5 hover:text-fg"
+                >
+                  {allDone ? `Show the ${DONE_PREVIEW} most recent` : `Show all ${columnItems.length}`}
+                </button>
+              </div>
+            ) : null}
           </section>
         );
       })}
@@ -111,12 +141,14 @@ export function KanbanBoard({
 
 function WorkCard({
   item,
+  initiativeTitle,
   onOpen,
   dragging,
   onDragStart,
   onDragEnd,
 }: {
   item: WorkItemDTO;
+  initiativeTitle?: string | undefined;
   onOpen: (id: string) => void;
   dragging: boolean;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
@@ -155,6 +187,14 @@ function WorkCard({
           {item.title}
         </button>
       </h3>
+      {initiativeTitle ? (
+        // Stage cards share titles ("Intake: charter & roadmap"), so name the initiative they belong to.
+        <p className="mt-1.5 flex min-w-0 items-center gap-1 text-[11px] text-muted">
+          <Rocket aria-hidden className="size-3 shrink-0 text-subtle" />
+          <span className="sr-only">Initiative:</span>
+          <span className="truncate">{initiativeTitle}</span>
+        </p>
+      ) : null}
       <div className="mt-2.5 flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
           {item.assigneeName ? (
