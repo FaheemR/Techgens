@@ -100,7 +100,7 @@ export function SpendChart({
                     )}
                     style={{ height: `${(d.credits / max) * 100}%` }}
                   />
-                  <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-border-strong bg-[#0f1724] px-2 py-1 text-[11px] shadow-lg group-hover:block">
+                  <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-border-strong bg-[#0f1724] px-2 py-1 text-xs shadow-lg group-hover:block">
                     <span className="block text-subtle">{formatDay(d.day)}</span>
                     <span className="font-medium tabular-nums text-fg">{credits(d.credits)} credits</span>
                   </div>

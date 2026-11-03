@@ -171,11 +171,13 @@ function CompanyForm({ company }: { company: CompanyDTO }) {
                           draft.values.filter((v) => v !== value),
                         )
                       }
-                      // 16px icon, 24×24 hit area (WCAG 2.5.8) via the transparent ::after.
-                      className="relative rounded p-0.5 text-cyan-200/70 after:absolute after:-inset-1 after:content-[''] hover:bg-white/10 hover:text-fg"
+                      // A 24×24 target (WCAG 2.5.8) around the 16px icon; negative margins keep the chip compact.
+                      className="group/remove -my-1 -mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded text-cyan-200/70 hover:text-fg"
                       aria-label={`Remove value ${value}`}
                     >
-                      <X className="size-3" />
+                      <span aria-hidden className="rounded p-0.5 group-hover/remove:bg-white/10">
+                        <X className="size-3" />
+                      </span>
                     </button>
                   </span>
                 ))}

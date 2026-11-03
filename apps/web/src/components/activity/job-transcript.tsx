@@ -299,7 +299,7 @@ function TranscriptEntry({
   const time = (
     <time
       dateTime={event.createdAt}
-      className="shrink-0 font-mono text-[11px] text-subtle"
+      className="shrink-0 font-mono text-xs text-subtle"
       title={formatDateTime(event.createdAt)}
     >
       {formatTime(event.createdAt)}
@@ -394,7 +394,7 @@ function TranscriptEntry({
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm text-fg">{event.summary || event.type}</p>
-        <p className="font-mono text-[11px] text-subtle">{event.type}</p>
+        <p className="font-mono text-xs text-subtle">{event.type}</p>
       </div>
       {time}
     </li>

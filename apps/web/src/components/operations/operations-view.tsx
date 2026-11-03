@@ -28,7 +28,7 @@ import { SkeletonRows } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { describeCron, formatDateTime, humanize, relativeTime, shortSha } from "@/lib/format";
+import { actorName, describeCron, formatDateTime, humanize, relativeTime, shortSha } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { severityTone, type Tone } from "@/lib/labels";
 import { useApiMutation } from "@/lib/mutations";
@@ -63,8 +63,19 @@ export function OperationsView() {
   );
 }
 
+/** "Reported by CEO (you)", "Reported by Sasha", "Reported manually" or "From Azure monitor". */
+function incidentSource(source: string, agentNames: ReadonlyMap<string, string>): string {
+  const s = source.toLowerCase();
+  if (s === "manual") return "Reported manually";
+  if (s === "ceo" || agentNames.has(source)) return `Reported by ${actorName(source, agentNames)}`;
+  if (/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(source)) return "Reported by an agent";
+  return `From ${humanize(source)}`;
+}
+
 function IncidentsCard({ productNames }: { productNames: Map<string, string> }) {
   const incidents = useIncidents();
+  const org = useOrg();
+  const agentNames = new Map((org.data?.agents ?? []).map((a) => [a.id, a.name]));
   const now = useNow();
   const [createOpen, setCreateOpen] = useState(false);
   const update = useApiMutation(
@@ -128,7 +139,8 @@ function IncidentsCard({ productNames }: { productNames: Map<string, string> }) 
                           {incident.productId
                             ? `${productNames.get(incident.productId) ?? "Product"} · `
                             : ""}
-                          {humanize(incident.source)} · opened {relativeTime(incident.createdAt, now)}
+                          {incidentSource(incident.source, agentNames)} · opened{" "}
+                          {relativeTime(incident.createdAt, now)}
                           {incident.resolvedAt ? ` · resolved ${relativeTime(incident.resolvedAt, now)}` : ""}
                         </p>
                         {incident.details ? (

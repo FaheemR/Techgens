@@ -27,6 +27,9 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
         <span className="hidden sm:block">
           <RuntimePill />
         </span>
+        <span className="sm:hidden">
+          <RuntimePill compact />
+        </span>
         <PauseToggle />
         <NotificationsPopover />
       </div>

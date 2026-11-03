@@ -365,7 +365,7 @@ function AgentDetail({ agent }: { agent: AgentDetailDTO }) {
             {agent.memories.map((m) => (
               <li key={m.id} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2">
                 <p className="whitespace-pre-wrap text-sm text-fg">{m.content}</p>
-                <p className="mt-1 text-[11px] text-subtle">{relativeTime(m.createdAt, now)}</p>
+                <p className="mt-1 text-xs text-subtle">{relativeTime(m.createdAt, now)}</p>
               </li>
             ))}
           </ul>

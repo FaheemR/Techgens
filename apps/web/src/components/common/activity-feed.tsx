@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { eventString } from "@/lib/events";
-import { credits, relativeTime, formatDateTime } from "@/lib/format";
+import { actorName, credits, relativeTime, formatDateTime } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { TONE_BADGE, type Tone } from "@/lib/labels";
 import { useOrg } from "@/lib/queries";
@@ -173,7 +173,7 @@ export function ActivityFeed({
         const href = eventHref(event);
         const actor =
           event.actorType === "ceo"
-            ? "CEO"
+            ? actorName("ceo")
             : event.actorType === "agent"
               ? (agentNames.get(event.actorId ?? "") ?? eventString(event, "agentName") ?? "Agent")
               : "System";
@@ -193,7 +193,7 @@ export function ActivityFeed({
               <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-subtle">
                 <span className="text-muted">{actor}</span>
                 <span aria-hidden>·</span>
-                <span className="font-mono text-[11px]">{event.type}</span>
+                <span className="font-mono text-xs">{event.type}</span>
                 <span aria-hidden>·</span>
                 <time dateTime={event.createdAt} title={formatDateTime(event.createdAt)}>
                   {relativeTime(event.createdAt, now)}

@@ -65,7 +65,7 @@ export function Segmented<T extends string>({
           >
             {option.label}
             {option.count !== undefined ? (
-              <span className={cn("tabular-nums text-[11px]", active ? "text-accent" : "text-subtle")}>
+              <span className={cn("tabular-nums text-xs", active ? "text-accent" : "text-subtle")}>
                 {option.count}
               </span>
             ) : null}

@@ -31,6 +31,7 @@ import { Credits } from "@/components/common/credits";
 import { KpiCard } from "@/components/common/kpi-card";
 import { PageHeader } from "@/components/common/page-header";
 import { QueryView } from "@/components/common/query-view";
+import { KeyResultWarning } from "@/components/common/key-result-warning";
 import { StageBar, stageShortTitle } from "@/components/common/stages";
 import {
   ApprovalKindBadge,
@@ -388,7 +389,7 @@ function ApprovalsPreview({ approvals }: { approvals: ApprovalSummaryDTO[] }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <ApprovalKindBadge kind={approval.kind} />
-                  <span className="text-[11px] text-subtle">{relativeTime(approval.createdAt, now)}</span>
+                  <span className="text-xs text-subtle">{relativeTime(approval.createdAt, now)}</span>
                 </div>
                 <p className="mt-1.5 line-clamp-2 text-sm font-medium text-fg">{approval.title}</p>
                 <p className="mt-0.5 truncate text-xs text-muted">
@@ -433,6 +434,7 @@ function GoalsCard({ goals }: { goals: GoalDTO[] }) {
                 <p className="text-sm font-medium leading-snug text-fg">{objective.title}</p>
                 <GoalStatusBadge status={objective.status} />
               </div>
+              <KeyResultWarning objective={objective} keyResults={keyResults} />
               <div className="mt-2 flex items-center gap-2">
                 <Progress
                   value={progress ?? 0}
@@ -450,7 +452,7 @@ function GoalsCard({ goals }: { goals: GoalDTO[] }) {
                   {progress === null ? "—" : percent(Math.min(progress, 1))}
                 </span>
               </div>
-              <p className="mt-1 text-[11px] text-subtle">
+              <p className="mt-1 text-xs text-subtle">
                 {keyResults.length} key result{keyResults.length === 1 ? "" : "s"}
                 {objective.dueDate ? ` · due ${formatDate(objective.dueDate)}` : ""}
               </p>

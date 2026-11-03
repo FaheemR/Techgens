@@ -100,8 +100,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         ref={regionRef}
         popover="manual"
         aria-label="Notifications"
-        style={{ inset: "auto 1rem 1rem auto" }}
-        className="pointer-events-none fixed z-[200] m-0 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 overflow-visible border-0 bg-transparent p-0 text-fg"
+        // Bottom-left on md+ (over the sidebar footer), below the top bar on phones: never over the bottom-right
+        // decision bars and sheet footers, where a toast would swallow the first click on Approve or Save.
+        className="pointer-events-none fixed inset-auto top-16 left-4 z-[200] m-0 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 overflow-visible border-0 bg-transparent p-0 text-fg md:top-auto md:bottom-4"
       >
         {toasts.map((t) => {
           const Icon = ICONS[t.variant];
@@ -124,7 +125,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={() => dismiss(t.id)}
                 aria-label="Dismiss notification"
-                className="-mr-1 rounded p-0.5 text-subtle hover:text-fg"
+                className="-my-1 -mr-1.5 inline-flex size-6 shrink-0 items-center justify-center rounded text-subtle hover:bg-white/5 hover:text-fg"
               >
                 <X className="size-3.5" />
               </button>

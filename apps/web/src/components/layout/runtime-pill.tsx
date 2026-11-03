@@ -5,13 +5,18 @@ import { FlaskConical, Github, PlugZap } from "lucide-react";
 import { useSystem } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
-/** Copilot runtime status: connected login, demo mode, or not connected (links to Settings). */
-export function RuntimePill() {
+/**
+ * Copilot runtime status: connected login, demo mode, or not connected (links to Settings). `compact` is the phone
+ * variant: a short "Demo" / "Connect" pill, and nothing once Copilot is connected.
+ */
+export function RuntimePill({ compact = false }: { compact?: boolean }) {
   const { data } = useSystem();
   if (!data) return null;
   const { runtime } = data;
-  const base =
-    "flex h-8 max-w-[18rem] items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors";
+  const base = cn(
+    "flex h-8 max-w-[18rem] items-center gap-1.5 rounded-full border text-xs font-medium transition-colors",
+    compact ? "px-2.5" : "px-3",
+  );
 
   if (data.demoMode || runtime.kind === "fake") {
     return (
@@ -20,13 +25,14 @@ export function RuntimePill() {
         className={cn(base, "border-amber-400/30 bg-amber-400/[0.07] text-amber-200 hover:bg-amber-400/15")}
         title={runtime.message ?? "Agents run on a simulated runtime. Connect GitHub Copilot in Settings."}
       >
-        <FlaskConical aria-hidden className="size-3.5 shrink-0" />
-        <span className="truncate">Demo mode</span>
+        <FlaskConical aria-hidden className={cn("size-3.5 shrink-0", compact && "max-[399px]:hidden")} />
+        <span className="truncate">{compact ? "Demo" : "Demo mode"}</span>
       </Link>
     );
   }
 
   if (runtime.authenticated) {
+    if (compact) return null;
     const login = runtime.login ?? data.github.login;
     return (
       <span
@@ -49,7 +55,7 @@ export function RuntimePill() {
       title={runtime.message ?? "GitHub Copilot is not connected"}
     >
       <PlugZap aria-hidden className="size-3.5 shrink-0" />
-      <span className="truncate">Not connected</span>
+      <span className="truncate">{compact ? "Connect" : "Not connected"}</span>
     </Link>
   );
 }

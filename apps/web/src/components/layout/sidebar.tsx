@@ -43,6 +43,8 @@ export function NavLinks({
                     href={item.href}
                     onClick={onNavigate}
                     aria-current={active ? "page" : undefined}
+                    // In the mobile navigation drawer, focus starts on the current page.
+                    data-autofocus={!collapsible && active ? true : undefined}
                     title={item.label}
                     className={cn(
                       "group relative flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
@@ -109,7 +111,7 @@ export function Sidebar() {
       </div>
       <div className="hidden border-t border-border px-4 py-3 lg:block">
         <p className="truncate text-xs font-medium text-fg">{company.data?.name ?? "Your company"}</p>
-        <p className="mt-0.5 truncate text-[11px] text-subtle">
+        <p className="mt-0.5 truncate text-xs text-subtle">
           {system.data ? `Techgens v${system.data.version}` : "Self-hosted · AI-staffed"}
         </p>
       </div>
