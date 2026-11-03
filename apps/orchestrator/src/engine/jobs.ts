@@ -351,18 +351,20 @@ export class JobEngine {
     if (filter.initiativeId) where.push(eq(schema.jobs.initiativeId, filter.initiativeId));
     if (filter.workItemId) where.push(eq(schema.jobs.workItemId, filter.workItemId));
     const rows = await this.app.db
-      .select({ job: schema.jobs, agentName: schema.agents.name, roleId: schema.agents.roleId, title: schema.workItems.title })
+      .select({ job: schema.jobs, agentName: schema.agents.name, roleId: schema.agents.roleId, department: schema.roles.department, title: schema.workItems.title })
       .from(schema.jobs)
       .innerJoin(schema.agents, eq(schema.jobs.agentId, schema.agents.id))
+      .innerJoin(schema.roles, eq(schema.agents.roleId, schema.roles.id))
       .leftJoin(schema.workItems, eq(schema.jobs.workItemId, schema.workItems.id))
       .where(where.length ? and(...where) : undefined)
       .orderBy(desc(schema.jobs.updatedAt))
       .limit(Math.min(filter.limit ?? 100, 500));
-    return rows.map(({ job: j, agentName, roleId, title }) => ({
+    return rows.map(({ job: j, agentName, roleId, department, title }) => ({
       id: j.id,
       agentId: j.agentId,
       agentName,
       roleId,
+      department,
       workItemId: j.workItemId,
       workItemTitle: title ?? (j.kind === "chat" ? "Directive chat" : null),
       initiativeId: j.initiativeId,

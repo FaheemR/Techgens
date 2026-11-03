@@ -61,7 +61,8 @@ export function installDemoScripts(rt: FakeAgentRuntime, options: { paceMs?: num
       }
       if (ctx.prompt.trim().length < 25) return ctx.say("Understood. Tell me what you'd like the company to build — ideally with a target date and a budget.");
       const { title, product } = deriveTitle(ctx.prompt);
-      await ctx.callTool("create_initiative", { title, summary: ctx.prompt.trim(), ...(product ? { productName: product } : {}) });
+      const budget = Number(/budget(?: of)? (\d+(?:\.\d+)?) credits/i.exec(ctx.prompt)?.[1] ?? NaN);
+      await ctx.callTool("create_initiative", { title, summary: ctx.prompt.trim(), ...(product ? { productName: product } : {}), ...(budget > 0 ? { budgetCredits: budget } : {}) });
       return ctx.say(`On it. I opened the initiative **${title}** and started intake — I'll draft the charter and roadmap for your approval.`);
     }
     if (ctx.labels.kind === "routine") {

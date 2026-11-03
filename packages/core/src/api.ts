@@ -148,6 +148,9 @@ export interface AgentDTO {
   status: AgentStatus;
   executor: "local-session" | "cloud-agent";
   model: string | null;
+  /** Per-agent overrides (null = role default). */
+  modelOverride: string | null;
+  dailyCreditsOverride: number | null;
   dailyBudgetCredits: number;
   spentTodayCredits: number;
   activeJobs: number;
@@ -164,6 +167,7 @@ export interface JobDTO {
   agentId: string;
   agentName: string;
   roleId: string;
+  department: Department;
   workItemId: string | null;
   workItemTitle: string | null;
   initiativeId: string | null;
@@ -218,6 +222,7 @@ export interface DocumentSummaryDTO {
   status: string;
   version: number;
   initiativeId: string | null;
+  initiativeTitle: string | null;
   authorName: string | null;
   updatedAt: string;
 }
@@ -366,6 +371,14 @@ export interface ModelOptionDTO {
   name: string;
   multiplier?: number;
   enabled: boolean;
+}
+
+/** GET /api/products/:id/azure-setup */
+export interface AzureSetupDTO {
+  script: string;
+  /** GitHub environment variables per environment (staging, production…). */
+  variables: Record<string, Record<string, string>>;
+  steps: string[];
 }
 
 export interface ApiErrorBody {

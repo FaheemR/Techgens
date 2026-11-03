@@ -1,6 +1,6 @@
 # Techgens orchestrator API
 
-Base URL: `http://localhost:4000` (env `ORCHESTRATOR_URL` in the web app). All routes are JSON under `/api`.
+Base URL: `http://localhost:4000` (env `NEXT_PUBLIC_API_URL` in the web app, inlined at build time). All routes are JSON under `/api`.
 Response types live in `packages/core/src/api.ts` (`*DTO`). Errors: non-2xx with `ApiErrorBody` `{ error, code? }`.
 
 ## System
@@ -22,7 +22,7 @@ Response types live in `packages/core/src/api.ts` (`*DTO`). Errors: non-2xx with
 | GET / POST | `/api/products` | `{ name, description?, vision?, repoOwner?, repoName? }` | `ProductDTO[]` / `ProductDTO` |
 | GET / PATCH | `/api/products/:id` | partial | `ProductDTO` |
 | POST | `/api/products/:id/bootstrap` | `{ createRepo: boolean, private?: boolean }` | `ProductDTO` (creates/bootstraps the GitHub repo from the product template) |
-| GET | `/api/products/:id/azure-setup` | — | `{ script: string, variables: Record<string,string> }` |
+| GET | `/api/products/:id/azure-setup` | — | `AzureSetupDTO` `{ script, variables: per-environment map, steps }` (guidance text when the product has no repo or Azure subscription yet) |
 
 ## Initiatives
 | Method | Path | Body | Response |

@@ -187,6 +187,8 @@ export class OrgService {
         status: a.status,
         executor: role.definition.executor,
         model: a.modelOverride ?? roleModels[a.roleId] ?? role.definition.model ?? null,
+        modelOverride: a.modelOverride,
+        dailyCreditsOverride: a.dailyCreditsOverride,
         dailyBudgetCredits: budgets.get(a.id) ?? role.definition.budget.dailyCredits,
         spentTodayCredits: spent.get(a.id) ?? 0,
         activeJobs: mine.length,

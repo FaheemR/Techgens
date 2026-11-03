@@ -40,6 +40,7 @@ export class WorkService {
     if (patch.status === "done" || patch.status === "cancelled") values.completedAt = new Date();
     const [row] = await this.app.db.update(schema.workItems).set(values).where(eq(schema.workItems.id, id)).returning();
     if (!row) throw new DomainError(`work item ${id} not found`, "not_found");
+    if (patch.status === "done" && row.parentId) await this.rollupParent(row.parentId);
     await this.app.bus.emit({
       type: "work_item.updated",
       actorType: actor?.agentId ? "agent" : "system",
@@ -50,6 +51,19 @@ export class WorkService {
       data: { initiativeId: row.initiativeId, status: row.status, codingStatus: row.codingStatus },
     });
     return row;
+  }
+
+  /** Closes an epic/story (and its GitHub issue) once every child is done or cancelled. */
+  private async rollupParent(parentId: string): Promise<void> {
+    const parent = await this.get(parentId).catch(() => null);
+    if (!parent || (parent.kind !== "epic" && parent.kind !== "story") || parent.status === "done") return;
+    const children = await this.list({ parentId });
+    if (!children.length || !children.every((c) => c.status === "done" || c.status === "cancelled")) return;
+    await this.update(parent.id, { status: "done" });
+    if (parent.githubIssueNumber && parent.githubRepo && this.app.github.connected) {
+      const [owner, name] = parent.githubRepo.split("/") as [string, string];
+      await (await this.app.github.botPort(owner)).updateIssue({ owner, name }, parent.githubIssueNumber, { state: "closed" }).catch((err) => this.app.log.warn({ err: (err as Error).message }, "closing parent issue failed"));
+    }
   }
 
   async list(filter: WorkFilter = {}): Promise<WorkItem[]> {

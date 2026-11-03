@@ -22,6 +22,9 @@ export class DocumentService {
 
   async summaries(docs: Document[]): Promise<DocumentSummaryDTO[]> {
     const names = await this.authorNames(docs.map((d) => d.createdByAgentId));
+    const iniIds = [...new Set(docs.map((d) => d.initiativeId).filter((x): x is string => Boolean(x)))];
+    const inis = iniIds.length ? await this.app.db.select({ id: schema.initiatives.id, title: schema.initiatives.title }).from(schema.initiatives).where(inArray(schema.initiatives.id, iniIds)) : [];
+    const iniTitle = new Map(inis.map((i) => [i.id, i.title]));
     return docs.map((d) => ({
       id: d.id,
       kind: d.kind as DocumentKind,
@@ -29,6 +32,7 @@ export class DocumentService {
       status: d.status,
       version: d.currentVersion,
       initiativeId: d.initiativeId,
+      initiativeTitle: d.initiativeId ? (iniTitle.get(d.initiativeId) ?? null) : null,
       authorName: d.createdByAgentId ? (names.get(d.createdByAgentId) ?? null) : null,
       updatedAt: d.updatedAt.toISOString(),
     }));

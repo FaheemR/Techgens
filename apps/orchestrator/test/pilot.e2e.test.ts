@@ -40,7 +40,7 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
     expect(messages.map((m) => m.authorType)).toEqual(["ceo", "agent"]);
     expect(messages[1]!.content).toMatch(/InvoiceLite MVP/);
     const [ini] = await app.lifecycle.list();
-    expect(ini).toMatchObject({ title: "InvoiceLite MVP", status: "active", stage: "intake" });
+    expect(ini).toMatchObject({ title: "InvoiceLite MVP", status: "active", stage: "intake", budgetCredits: 400 });
     expect(await pendingKinds(app)).toEqual(["vision_roadmap"]);
 
     // CEO requests changes once: the Chief of Staff revises and resubmits (round 2).
@@ -83,6 +83,9 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
     const prs = [...repo.prs.values()];
     expect(prs.filter((p) => p.merged && p.baseRef === "develop")).toHaveLength(3);
     expect(prs.filter((p) => p.baseRef === "develop").every((p) => p.reviews.some((r) => r.state === "APPROVED"))).toBe(true);
+    const [epic] = await app.work.list({ initiativeId: ini!.id, kind: "epic" });
+    expect(epic?.status).toBe("done");
+    expect(issues.find((i) => i.labels.includes("epic"))!.state).toBe("closed");
     const codingTasks = (await app.work.list({ initiativeId: ini!.id, kind: "task" })).filter((t) => t.forCodingAgent);
     expect(codingTasks).toHaveLength(3);
     expect(codingTasks.every((t) => t.status === "done" && t.codingStatus === "merged" && t.prUrl)).toBe(true);
