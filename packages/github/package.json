@@ -1,0 +1,16 @@
+{
+  "name": "@techgens/github",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@techgens/core": "workspace:*",
+    "octokit": "^5.0.5"
+  }
+}

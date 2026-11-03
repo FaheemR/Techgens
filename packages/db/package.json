@@ -1,0 +1,25 @@
+{
+  "name": "@techgens/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./types": "./src/types.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@techgens/core": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.11",
+    "@types/pg": "^8.15.0"
+  }
+}
