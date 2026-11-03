@@ -406,7 +406,11 @@ function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onD
       invalidate: [["approvals"], qk.dashboard, ["initiatives"], ["notifications"], ["budgets"], ["usage"]],
       onSuccess: (result, body) => {
         setConfirmReject(false);
-        onDecided(result, body.outcome, body.extraCredits);
+        onDecided(
+          result,
+          body.outcome,
+          body.extraCredits === undefined ? undefined : Number(body.extraCredits),
+        );
       },
     },
   );
