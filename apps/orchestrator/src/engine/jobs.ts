@@ -2,16 +2,19 @@ import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import {
   DomainError,
   TERMINAL_JOB_STATUSES,
+  gatedStage,
   nanoToCredits,
   truncate,
   type ApprovalOutcome,
   type BudgetDTO,
+  type BudgetOverrunPayload,
   type JobDTO,
   type JobStatus,
 } from "@techgens/core";
 import { schema, type Agent, type Approval, type Job, type JobResult, type Role } from "@techgens/db";
 import { RuntimeUnavailableError } from "@techgens/runtime";
 import type { Techgens } from "../app";
+import { fmtCredits, grantWindow } from "../services/budget";
 import { runJobTurns } from "./runner";
 
 export interface JobDispatcher {
@@ -92,7 +95,12 @@ export class JobEngine {
     return s;
   }
 
-  private async emit(job: Job, type: "job.queued" | "job.started" | "job.waiting" | "job.completed" | "job.failed" | "job.cancelled", summary: string, data: Record<string, unknown> = {}) {
+  private async emit(
+    job: Job,
+    type: "job.queued" | "job.started" | "job.waiting" | "job.completed" | "job.failed" | "job.cancelled",
+    summary: string,
+    data: Record<string, unknown> = {},
+  ) {
     await this.app.bus.emit({
       type,
       actorType: "agent",
@@ -100,7 +108,13 @@ export class JobEngine {
       subjectType: "job",
       subjectId: job.id,
       summary,
-      data: { initiativeId: job.initiativeId, workItemId: job.workItemId, kind: job.kind, threadId: job.threadId, ...data },
+      data: {
+        initiativeId: job.initiativeId,
+        workItemId: job.workItemId,
+        kind: job.kind,
+        threadId: job.threadId,
+        ...data,
+      },
     });
   }
 
@@ -113,14 +127,21 @@ export class JobEngine {
     if (agent.status !== "active") return; // re-queued when the agent is resumed
     if (job.initiativeId) {
       const ini = await this.app.lifecycle.get(job.initiativeId);
-      if (ini.status === "cancelled") return void (await this.finish(job, "cancelled", undefined, "Initiative cancelled"));
+      if (ini.status === "cancelled")
+        return void (await this.finish(job, "cancelled", undefined, "Initiative cancelled"));
       if (ini.status === "paused" && job.kind !== "chat") return;
     }
     if (job.kind !== "chat") {
       const [busy] = await this.app.db
         .select({ id: schema.jobs.id })
         .from(schema.jobs)
-        .where(and(eq(schema.jobs.agentId, agent.id), eq(schema.jobs.status, "running"), sql`${schema.jobs.kind} <> 'chat'`))
+        .where(
+          and(
+            eq(schema.jobs.agentId, agent.id),
+            eq(schema.jobs.status, "running"),
+            sql`${schema.jobs.kind} <> 'chat'`,
+          ),
+        )
         .limit(1);
       if (busy) return void (await this.dispatcher.enqueue(jobId, 10));
     }
@@ -129,7 +150,12 @@ export class JobEngine {
 
     const [claimed] = await this.app.db
       .update(schema.jobs)
-      .set({ status: "running", attempts: sql`${schema.jobs.attempts} + 1`, startedAt: job.startedAt ?? new Date(), updatedAt: new Date() })
+      .set({
+        status: "running",
+        attempts: sql`${schema.jobs.attempts} + 1`,
+        startedAt: job.startedAt ?? new Date(),
+        updatedAt: new Date(),
+      })
       .where(and(eq(schema.jobs.id, jobId), eq(schema.jobs.status, "queued")))
       .returning();
     if (!claimed) return;
@@ -151,54 +177,127 @@ export class JobEngine {
     const current = await this.getJob(job.id);
     if (isTerminal(current.status)) return;
     if (err instanceof RuntimeUnavailableError) {
-      await this.app.db.update(schema.jobs).set({ status: "queued", attempts: sql`greatest(${schema.jobs.attempts} - 1, 0)` }).where(eq(schema.jobs.id, job.id));
+      await this.app.db
+        .update(schema.jobs)
+        .set({ status: "queued", attempts: sql`greatest(${schema.jobs.attempts} - 1, 0)` })
+        .where(eq(schema.jobs.id, job.id));
       if (!this.runtimeWarned) {
         this.runtimeWarned = true;
-        await this.app.notifications.notify({ kind: "system", title: "Agents are waiting for GitHub", body: err.message, link: "/settings" });
+        await this.app.notifications.notify({
+          kind: "system",
+          title: "Agents are waiting for GitHub",
+          body: err.message,
+          link: "/settings",
+        });
       }
       return void (await this.dispatcher.enqueue(job.id, 60));
     }
     this.app.log.warn({ jobId: job.id, err: err.message }, "agent turn failed");
     if (current.attempts < 2) {
-      await this.app.db.update(schema.jobs).set({ status: "queued", error: err.message, updatedAt: new Date() }).where(eq(schema.jobs.id, job.id));
+      await this.app.db
+        .update(schema.jobs)
+        .set({ status: "queued", error: err.message, updatedAt: new Date() })
+        .where(eq(schema.jobs.id, job.id));
       return void (await this.dispatcher.enqueue(job.id, 30));
     }
-    await this.finish(current, "failed", undefined, `${agent.name} could not complete the assignment: ${err.message}`);
+    await this.finish(
+      current,
+      "failed",
+      undefined,
+      `${agent.name} could not complete the assignment: ${err.message}`,
+    );
   }
 
   private async blockOnBudget(job: Job, budget: BudgetDTO): Promise<void> {
     const [pending] = await this.app.db
       .select()
       .from(schema.approvals)
-      .where(and(eq(schema.approvals.kind, "budget_overrun"), eq(schema.approvals.status, "pending"), sql`${schema.approvals.payload}->>'budgetId' = ${budget.id}`))
+      .where(
+        and(
+          eq(schema.approvals.kind, "budget_overrun"),
+          eq(schema.approvals.status, "pending"),
+          sql`${schema.approvals.payload}->>'budgetId' = ${budget.id}`,
+        ),
+      )
       .limit(1);
     let approval: Approval | undefined = pending;
     if (pending) {
       const jobIds = [...new Set([...((pending.payload.jobIds as string[]) ?? []), job.id])];
-      await this.app.db.update(schema.approvals).set({ payload: { ...pending.payload, jobIds } }).where(eq(schema.approvals.id, pending.id));
+      await this.app.db
+        .update(schema.approvals)
+        .set({ payload: { ...pending.payload, jobIds, spentCredits: budget.spentCredits } })
+        .where(eq(schema.approvals.id, pending.id));
     } else {
-      await this.app.bus.emit({ type: "budget.exceeded", subjectType: "budget", subjectId: budget.id, summary: `${budget.scopeLabel} ${budget.period} budget exceeded`, data: { ...budget } });
-      const suggested = Math.max(10, Math.round(budget.limitCredits * 0.5));
+      const scopeName = await this.app.budget.scopeName(budget.scope, budget.scopeId);
+      await this.app.bus.emit({
+        type: "budget.exceeded",
+        subjectType: "budget",
+        subjectId: budget.id,
+        summary: `${scopeName} ${budget.period} budget exceeded`,
+        data: { ...budget, scopeLabel: scopeName },
+      });
+      const limit = budget.limitCredits + budget.grantedCredits;
+      const suggested = Math.max(10, Math.round(limit * 0.5));
+      const payload: BudgetOverrunPayload = {
+        budgetId: budget.id,
+        jobIds: [job.id],
+        scope: budget.scope,
+        scopeName,
+        period: budget.period,
+        limitCredits: budget.limitCredits,
+        grantedCredits: budget.grantedCredits,
+        spentCredits: budget.spentCredits,
+        windowEndsAt: budget.windowEndsAt,
+        suggestedExtraCredits: suggested,
+      };
       approval = (
         await this.app.approvals.request({
           kind: "budget_overrun",
-          title: `${budget.scopeLabel}: ${budget.period} budget exceeded`,
-          summary: `Spent ${budget.spentCredits.toFixed(2)} of ${budget.limitCredits} AI credits (${budget.scope} · ${budget.period}). Work is paused until you grant extra credits for this window (suggested: ${suggested}).`,
-          initiativeId: job.initiativeId,
-          payload: { budgetId: budget.id, jobIds: [job.id], suggestedExtraCredits: suggested },
+          title: `${scopeName}: ${budget.period} budget exceeded`,
+          summary: `Spent ${fmtCredits(budget.spentCredits)} of ${fmtCredits(limit)} AI credits (${budget.scope} · ${budget.period}${budget.grantedCredits ? `, incl. ${fmtCredits(budget.grantedCredits)} already granted` : ""}). Work is paused until you grant extra credits ${grantWindow(budget.period, budget.windowEndsAt)}; suggested: ${suggested}.`,
+          // Only an initiative's own budget belongs to that initiative; company/agent/department overruns block any job.
+          initiativeId: budget.scope === "initiative" ? budget.scopeId : null,
+          payload: { ...payload },
         })
       ).approval;
     }
     if (approval!.status === "approved") return void (await this.dispatcher.enqueue(job.id, 1));
-    await this.app.db.update(schema.jobs).set({ status: "waiting", waitReason: "approval", waitState: { approvalId: approval!.id }, updatedAt: new Date() }).where(eq(schema.jobs.id, job.id));
-    await this.emit(job, "job.waiting", "Waiting for a budget decision", { waitReason: "approval", approvalId: approval!.id });
+    await this.app.db
+      .update(schema.jobs)
+      .set({
+        status: "waiting",
+        waitReason: "approval",
+        waitState: { approvalId: approval!.id },
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.jobs.id, job.id));
+    await this.emit(job, "job.waiting", "Waiting for a budget decision", {
+      waitReason: "approval",
+      approvalId: approval!.id,
+    });
   }
 
   // ---- State transitions ---------------------------------------------------------------------------------------
 
-  async setWaiting(job: Job, reason: "children" | "approval" | "external", waitState: Job["waitState"]): Promise<void> {
-    await this.app.db.update(schema.jobs).set({ status: "waiting", waitReason: reason, waitState, updatedAt: new Date() }).where(eq(schema.jobs.id, job.id));
-    await this.emit(job, "job.waiting", reason === "children" ? "Waiting for delegated work" : reason === "approval" ? "Waiting for CEO approval" : "Waiting for coding agents", { waitReason: reason });
+  async setWaiting(
+    job: Job,
+    reason: "children" | "approval" | "external",
+    waitState: Job["waitState"],
+  ): Promise<void> {
+    await this.app.db
+      .update(schema.jobs)
+      .set({ status: "waiting", waitReason: reason, waitState, updatedAt: new Date() })
+      .where(eq(schema.jobs.id, job.id));
+    await this.emit(
+      job,
+      "job.waiting",
+      reason === "children"
+        ? "Waiting for delegated work"
+        : reason === "approval"
+          ? "Waiting for CEO approval"
+          : "Waiting for coding agents",
+      { waitReason: reason },
+    );
     if (reason === "children") await this.maybeResumeParent(job.id);
   }
 
@@ -206,7 +305,15 @@ export class JobEngine {
   async resume(jobId: string, message: string | null, from: JobStatus[] = ["waiting"]): Promise<boolean> {
     const [row] = await this.app.db
       .update(schema.jobs)
-      .set({ status: "queued", resumeMessage: message, waitReason: null, waitState: {}, resumeCount: sql`${schema.jobs.resumeCount} + 1`, finishedAt: null, updatedAt: new Date() })
+      .set({
+        status: "queued",
+        resumeMessage: message,
+        waitReason: null,
+        waitState: {},
+        resumeCount: sql`${schema.jobs.resumeCount} + 1`,
+        finishedAt: null,
+        updatedAt: new Date(),
+      })
       .where(and(eq(schema.jobs.id, jobId), inArray(schema.jobs.status, from)))
       .returning();
     if (!row) return false;
@@ -215,21 +322,46 @@ export class JobEngine {
     return true;
   }
 
-  async finish(job: Job, status: "succeeded" | "failed" | "cancelled", result?: JobResult, error?: string): Promise<void> {
+  async finish(
+    job: Job,
+    status: "succeeded" | "failed" | "cancelled",
+    result?: JobResult,
+    error?: string,
+  ): Promise<void> {
     const [row] = await this.app.db
       .update(schema.jobs)
-      .set({ status, result: result ?? null, error: error ?? null, waitReason: null, finishedAt: new Date(), updatedAt: new Date() })
+      .set({
+        status,
+        result: result ?? null,
+        error: error ?? null,
+        waitReason: null,
+        finishedAt: new Date(),
+        updatedAt: new Date(),
+      })
       .where(eq(schema.jobs.id, job.id))
       .returning();
     const done = row!;
-    await this.emit(done, status === "succeeded" ? "job.completed" : status === "failed" ? "job.failed" : "job.cancelled", truncate(result?.summary ?? error ?? status, 300), { status });
+    await this.emit(
+      done,
+      status === "succeeded" ? "job.completed" : status === "failed" ? "job.failed" : "job.cancelled",
+      truncate(result?.summary ?? error ?? status, 300),
+      { status },
+    );
     const item = done.workItemId ? await this.app.work.get(done.workItemId).catch(() => null) : null;
     if (item && item.kind !== "stage" && done.kind !== "chat") {
       const blocked = status !== "succeeded" || result?.outcome === "blocked";
-      await this.app.work.update(item.id, { status: blocked ? "blocked" : "done", result: { summary: result?.summary ?? error ?? "" } });
+      await this.app.work.update(item.id, {
+        status: status === "cancelled" ? "cancelled" : blocked ? "blocked" : "done",
+        result: { summary: result?.summary ?? error ?? "" },
+      });
     }
     if (done.kind === "chat" && done.threadId) {
-      await this.app.chat.postAgentReply(done.threadId, done.agentId, result?.summary || error || "(no reply)", done.id);
+      await this.app.chat.postAgentReply(
+        done.threadId,
+        done.agentId,
+        result?.summary || error || "(no reply)",
+        done.id,
+      );
     }
     if (done.parentJobId) await this.maybeResumeParent(done.parentJobId);
     if (item?.kind === "stage") await this.app.lifecycle.onStageJobFinished(done, item);
@@ -239,7 +371,11 @@ export class JobEngine {
   async maybeResumeParent(parentId: string): Promise<void> {
     const parent = await this.getJob(parentId);
     if (parent.status !== "waiting" || parent.waitReason !== "children") return;
-    const children = await this.app.db.select().from(schema.jobs).where(eq(schema.jobs.parentJobId, parentId)).orderBy(asc(schema.jobs.createdAt));
+    const children = await this.app.db
+      .select()
+      .from(schema.jobs)
+      .where(eq(schema.jobs.parentJobId, parentId))
+      .orderBy(asc(schema.jobs.createdAt));
     if (children.some((c) => !isTerminal(c.status))) return;
     const reportIds = new Set(parent.waitState.childJobIds ?? children.map((c) => c.id));
     const report = children.filter((c) => reportIds.has(c.id));
@@ -247,21 +383,45 @@ export class JobEngine {
     const lines = await Promise.all(
       report.map(async (c) => {
         const item = c.workItemId ? await this.app.work.get(c.workItemId).catch(() => null) : null;
-        const text = c.status === "succeeded" ? (c.result?.summary ?? "done") : `${c.status}: ${c.error ?? c.result?.summary ?? ""}`;
+        const text =
+          c.status === "succeeded"
+            ? (c.result?.summary ?? "done")
+            : `${c.status}: ${c.error ?? c.result?.summary ?? ""}`;
         return `- **${agents.get(c.agentId) ?? "agent"}** — ${item?.title ?? "task"} (${c.result?.outcome === "blocked" ? "blocked" : c.status}): ${truncate(text, 1500)}`;
       }),
     );
-    await this.resume(parentId, `Your delegated work has finished:\n${lines.join("\n")}\n\nReview the results (read_document for details) and continue your assignment.`);
+    await this.resume(
+      parentId,
+      `Your delegated work has finished:\n${lines.join("\n")}\n\nReview the results (read_document for details) and continue your assignment.`,
+    );
   }
 
-  async onApprovalDecided(approval: Approval, outcome: ApprovalOutcome, comment: string, note: string): Promise<void> {
+  async onApprovalDecided(
+    approval: Approval,
+    outcome: ApprovalOutcome,
+    comment: string,
+    note: string,
+  ): Promise<void> {
+    // A rejected stage gate pauses its initiative and stops the stage's jobs (LifecycleService.onApprovalDecided).
+    if (outcome === "rejected" && approval.initiativeId && gatedStage(approval.kind, approval.payload))
+      return;
     const waiting = await this.app.db
       .select()
       .from(schema.jobs)
-      .where(and(eq(schema.jobs.status, "waiting"), eq(schema.jobs.waitReason, "approval"), sql`${schema.jobs.waitState}->>'approvalId' = ${approval.id}`));
+      .where(
+        and(
+          eq(schema.jobs.status, "waiting"),
+          eq(schema.jobs.waitReason, "approval"),
+          sql`${schema.jobs.waitState}->>'approvalId' = ${approval.id}`,
+        ),
+      );
     for (const job of waiting) {
       if (approval.kind === "budget_overrun") {
-        if (outcome === "approved") await this.resume(job.id, job.sessionId ? "The CEO extended your budget. Continue your assignment." : null);
+        if (outcome === "approved")
+          await this.resume(
+            job.id,
+            job.sessionId ? "The CEO extended your budget. Continue your assignment." : null,
+          );
         else await this.finish(job, "failed", undefined, "Budget overrun was not approved by the CEO.");
         continue;
       }
@@ -288,16 +448,28 @@ export class JobEngine {
     if (isTerminal(job.status)) return job;
     this.aborts.get(jobId)?.abort();
     await this.finish(job, "cancelled", undefined, reason);
-    const children = await this.app.db.select({ id: schema.jobs.id }).from(schema.jobs).where(and(eq(schema.jobs.parentJobId, jobId), inArray(schema.jobs.status, ["queued", "running", "waiting"])));
+    const children = await this.app.db
+      .select({ id: schema.jobs.id })
+      .from(schema.jobs)
+      .where(
+        and(
+          eq(schema.jobs.parentJobId, jobId),
+          inArray(schema.jobs.status, ["queued", "running", "waiting"]),
+        ),
+      );
     for (const c of children) await this.cancelJob(c.id, reason);
     return this.getJob(jobId);
   }
 
   async retryJob(jobId: string): Promise<Job> {
     const job = await this.getJob(jobId);
-    if (job.status !== "failed" && job.status !== "cancelled") throw new DomainError("only failed or cancelled jobs can be retried", "conflict");
+    if (job.status !== "failed" && job.status !== "cancelled")
+      throw new DomainError("only failed or cancelled jobs can be retried", "conflict");
     await this.app.db.update(schema.jobs).set({ attempts: 0, error: null }).where(eq(schema.jobs.id, jobId));
-    await this.resume(jobId, job.sessionId ? "Please retry your assignment from where you left off." : null, ["failed", "cancelled"]);
+    await this.resume(jobId, job.sessionId ? "Please retry your assignment from where you left off." : null, [
+      "failed",
+      "cancelled",
+    ]);
     return this.getJob(jobId);
   }
 
@@ -309,19 +481,29 @@ export class JobEngine {
   }
 
   async requeueAgentJobs(agentId: string): Promise<void> {
-    const queued = await this.app.db.select({ id: schema.jobs.id }).from(schema.jobs).where(and(eq(schema.jobs.agentId, agentId), eq(schema.jobs.status, "queued")));
+    const queued = await this.app.db
+      .select({ id: schema.jobs.id })
+      .from(schema.jobs)
+      .where(and(eq(schema.jobs.agentId, agentId), eq(schema.jobs.status, "queued")));
     await this.requeueJobs(queued.map((j) => j.id));
   }
 
   /** Re-dispatches every queued job (after restart or resume of the system). */
   async requeueAll(): Promise<void> {
-    const queued = await this.app.db.select({ id: schema.jobs.id }).from(schema.jobs).where(eq(schema.jobs.status, "queued"));
+    const queued = await this.app.db
+      .select({ id: schema.jobs.id })
+      .from(schema.jobs)
+      .where(eq(schema.jobs.status, "queued"));
     await this.requeueJobs(queued.map((j) => j.id));
   }
 
   /** Jobs left "running" by a crash are re-queued on startup. */
   async recoverInterrupted(): Promise<number> {
-    const rows = await this.app.db.update(schema.jobs).set({ status: "queued", updatedAt: new Date() }).where(eq(schema.jobs.status, "running")).returning({ id: schema.jobs.id });
+    const rows = await this.app.db
+      .update(schema.jobs)
+      .set({ status: "queued", updatedAt: new Date() })
+      .where(eq(schema.jobs.status, "running"))
+      .returning({ id: schema.jobs.id });
     return rows.length;
   }
 
@@ -329,12 +511,18 @@ export class JobEngine {
   async runUntilIdle(maxJobs = 500): Promise<number> {
     let processed = 0;
     while (processed < maxJobs) {
-      const queued = await this.app.db.select().from(schema.jobs).where(eq(schema.jobs.status, "queued")).orderBy(asc(schema.jobs.updatedAt)).limit(20);
+      const queued = await this.app.db
+        .select()
+        .from(schema.jobs)
+        .where(eq(schema.jobs.status, "queued"))
+        .orderBy(asc(schema.jobs.updatedAt))
+        .limit(20);
       let progressed = false;
       for (const job of queued) {
         await this.processJob(job.id);
         const after = await this.getJob(job.id);
-        if (after.status !== "queued" || after.updatedAt.getTime() !== job.updatedAt.getTime()) progressed = true;
+        if (after.status !== "queued" || after.updatedAt.getTime() !== job.updatedAt.getTime())
+          progressed = true;
         processed++;
       }
       if (!progressed) break;
@@ -344,14 +532,28 @@ export class JobEngine {
 
   // ---- Queries -------------------------------------------------------------------------------------------------
 
-  async listJobDTOs(filter: { status?: JobStatus; agentId?: string; initiativeId?: string; workItemId?: string; limit?: number } = {}): Promise<JobDTO[]> {
+  async listJobDTOs(
+    filter: {
+      status?: JobStatus;
+      agentId?: string;
+      initiativeId?: string;
+      workItemId?: string;
+      limit?: number;
+    } = {},
+  ): Promise<JobDTO[]> {
     const where: SQL[] = [];
     if (filter.status) where.push(eq(schema.jobs.status, filter.status));
     if (filter.agentId) where.push(eq(schema.jobs.agentId, filter.agentId));
     if (filter.initiativeId) where.push(eq(schema.jobs.initiativeId, filter.initiativeId));
     if (filter.workItemId) where.push(eq(schema.jobs.workItemId, filter.workItemId));
     const rows = await this.app.db
-      .select({ job: schema.jobs, agentName: schema.agents.name, roleId: schema.agents.roleId, department: schema.roles.department, title: schema.workItems.title })
+      .select({
+        job: schema.jobs,
+        agentName: schema.agents.name,
+        roleId: schema.agents.roleId,
+        department: schema.roles.department,
+        title: schema.workItems.title,
+      })
       .from(schema.jobs)
       .innerJoin(schema.agents, eq(schema.jobs.agentId, schema.agents.id))
       .innerJoin(schema.roles, eq(schema.agents.roleId, schema.roles.id))
@@ -396,7 +598,15 @@ export class JobEngine {
   }
 
   async openChildren(jobId: string): Promise<Job[]> {
-    return this.app.db.select().from(schema.jobs).where(and(eq(schema.jobs.parentJobId, jobId), inArray(schema.jobs.status, ["queued", "running", "waiting"])));
+    return this.app.db
+      .select()
+      .from(schema.jobs)
+      .where(
+        and(
+          eq(schema.jobs.parentJobId, jobId),
+          inArray(schema.jobs.status, ["queued", "running", "waiting"]),
+        ),
+      );
   }
 
   agentRole(agent: Agent, role: Role) {

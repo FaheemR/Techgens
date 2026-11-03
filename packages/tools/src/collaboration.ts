@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { DECISION_TYPES, DOCUMENT_KINDS, GATE_KINDS_FOR_TOOL, LIFECYCLE_STAGES, PRIORITIES, truncate } from "@techgens/core";
+import {
+  DECISION_TYPES,
+  DOCUMENT_KINDS,
+  GATE_KINDS_FOR_TOOL,
+  LIFECYCLE_STAGES,
+  PRIORITIES,
+  truncate,
+} from "@techgens/core";
 import { defineAgentTool, type AgentToolSpec } from "@techgens/runtime";
 import type { ToolCaller, ToolServices } from "./types";
 
@@ -17,7 +24,10 @@ export const collaborationTools: Record<string, Factory> = {
         assignee: z.string().describe("Role id (e.g. 'business-analyst') or agent name"),
         title: z.string().min(3).max(160),
         instructions: z.string().min(10).describe("Context, what to do, constraints"),
-        expectedOutput: z.string().min(5).describe("What the assignee must deliver (e.g. 'a research document')"),
+        expectedOutput: z
+          .string()
+          .min(5)
+          .describe("What the assignee must deliver (e.g. 'a research document')"),
         priority: z.enum(PRIORITIES).optional(),
         kind: z.enum(["task", "research", "document", "review"]).optional(),
       }),
@@ -43,7 +53,10 @@ export const collaborationTools: Record<string, Factory> = {
     defineAgentTool({
       name: "report_progress",
       description: "Post a short progress update visible to the CEO and your manager.",
-      schema: z.object({ message: z.string().min(3).max(1000), percentComplete: z.number().min(0).max(100).optional() }),
+      schema: z.object({
+        message: z.string().min(3).max(1000),
+        percentComplete: z.number().min(0).max(100).optional(),
+      }),
       handler: async (i) => {
         await s.reportProgress(c, i);
         return "Progress recorded.";
@@ -77,7 +90,10 @@ export const collaborationTools: Record<string, Factory> = {
       schema: z.object({
         kind: z.enum(GATE_KINDS_FOR_TOOL as [string, ...string[]]),
         title: z.string().min(3).max(160),
-        summary: z.string().min(10).describe("What is being approved, key decisions, risks, and your recommendation"),
+        summary: z
+          .string()
+          .min(10)
+          .describe("What is being approved, key decisions, risks, and your recommendation"),
         documentIds: z.array(z.string()).default([]),
         payload: z.record(z.string(), z.unknown()).optional(),
       }),
@@ -128,7 +144,11 @@ export const collaborationTools: Record<string, Factory> = {
     defineAgentTool({
       name: "read_document",
       description: "Read a document by id, or the latest document of a kind/title in your initiative.",
-      schema: z.object({ documentId: z.string().optional(), title: z.string().optional(), kind: docKind.optional() }),
+      schema: z.object({
+        documentId: z.string().optional(),
+        title: z.string().optional(),
+        kind: docKind.optional(),
+      }),
       handler: async (i) => {
         const d = await s.readDocument(c, i);
         if (!d) return { text: "Document not found.", failed: true };
@@ -139,12 +159,15 @@ export const collaborationTools: Record<string, Factory> = {
   list_documents: (c, s) =>
     defineAgentTool({
       name: "list_documents",
-      description: "List documents of an initiative (defaults to your current initiative), optionally by kind.",
+      description:
+        "List documents of an initiative (defaults to your current initiative), optionally by kind.",
       schema: z.object({ initiativeId: z.string().optional(), kind: docKind.optional() }),
       handler: async (i) => {
         const docs = await s.listDocuments(c, i);
         if (!docs.length) return "No documents yet.";
-        return docs.map((d) => `- ${d.title} (id ${d.id} · ${d.kind} · v${d.version} · ${d.status})`).join("\n");
+        return docs
+          .map((d) => `- ${d.title} (id ${d.id} · ${d.kind} · v${d.version} · ${d.status})`)
+          .join("\n");
       },
     }),
 
@@ -172,18 +195,34 @@ export const collaborationTools: Record<string, Factory> = {
     defineAgentTool({
       name: "create_initiative",
       description:
-        "Create an initiative from a CEO directive. This starts the product lifecycle: you will be assigned the intake stage (charter + roadmap) right away. Optionally name the product (created if new).",
+        "Create an initiative from a CEO directive that asks for new work (never for questions or status requests). This starts the product lifecycle: you will be assigned the intake stage (charter + roadmap) right away. Always set a total budget cap; without one the default cap applies.",
       schema: z.object({
-        title: z.string().min(3).max(160),
+        title: z
+          .string()
+          .min(3)
+          .max(60)
+          .describe("Short name (≤ 60 characters), e.g. 'InvoiceLite client portal'"),
         summary: z.string().min(10),
-        productName: z.string().optional(),
+        productName: z
+          .string()
+          .optional()
+          .describe(
+            "Product the directive builds or extends (existing name, or a new product). Omit for research/strategy work: no repository stages.",
+          ),
         targetDate: z.string().optional().describe("ISO date"),
-        budgetCredits: z.number().positive().optional(),
+        budgetCredits: z
+          .number()
+          .positive()
+          .optional()
+          .describe(
+            "Total AI-credit cap for the whole initiative (convert per-week/month budgets with the timeline)",
+          ),
         skipStages: z.array(z.enum(LIFECYCLE_STAGES)).optional(),
       }),
       handler: async (i) => {
         const r = await s.createInitiative(c, i);
-        return `Initiative created (${r.initiativeId}). The intake stage has been assigned to you.`;
+        const budget = `${r.budgetCredits} credits${r.defaultBudget ? " (default cap: the directive named no budget — tell the CEO you applied it)" : ""}`;
+        return `Initiative created (${r.initiativeId}). Total budget cap: ${budget}. Product: ${r.productName ?? "none (repository stages are skipped)"}. The intake stage has been assigned to you.`;
       },
     }),
 
@@ -194,7 +233,13 @@ export const collaborationTools: Record<string, Factory> = {
       schema: z.object({
         initiativeId: z.string().optional(),
         milestones: z
-          .array(z.object({ title: z.string().min(3), description: z.string().optional(), dueDate: z.string().optional() }))
+          .array(
+            z.object({
+              title: z.string().min(3),
+              description: z.string().optional(),
+              dueDate: z.string().optional(),
+            }),
+          )
           .min(1)
           .max(20),
       }),
@@ -207,8 +252,13 @@ export const collaborationTools: Record<string, Factory> = {
   record_decision: (c, s) =>
     defineAgentTool({
       name: "record_decision",
-      description: "Append to the initiative decision log (decisions, scope changes, overrides, assumptions).",
-      schema: z.object({ type: z.enum(DECISION_TYPES).default("decision"), summary: z.string().min(5), details: z.string().optional() }),
+      description:
+        "Append to the initiative decision log (decisions, scope changes, overrides, assumptions).",
+      schema: z.object({
+        type: z.enum(DECISION_TYPES).default("decision"),
+        summary: z.string().min(5),
+        details: z.string().optional(),
+      }),
       handler: async (i) => {
         await s.recordDecision(c, i);
         return "Decision recorded.";
@@ -218,7 +268,8 @@ export const collaborationTools: Record<string, Factory> = {
   remember: (c, s) =>
     defineAgentTool({
       name: "remember",
-      description: "Save a short note to your long-term memory (preferences, lessons learned). Shown in future sessions.",
+      description:
+        "Save a short note to your long-term memory (preferences, lessons learned). Shown in future sessions.",
       schema: z.object({ note: z.string().min(5).max(500) }),
       handler: async (i) => {
         await s.remember(c, i);

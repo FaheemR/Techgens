@@ -15,6 +15,16 @@ import {
 
 const sha = () => randomBytes(20).toString("hex");
 
+/** Unified-diff statistics, as GitHub reports them on pull requests. */
+function diffStats(diff: string): { additions: number; deletions: number; changedFiles: number } {
+  const lines = diff.split("\n");
+  return {
+    additions: lines.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length,
+    deletions: lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length,
+    changedFiles: lines.filter((l) => l.startsWith("diff --git")).length,
+  };
+}
+
 interface FakeIssue extends IssueInfo {
   body: string;
   labels: string[];
@@ -35,6 +45,8 @@ interface FakeRepo {
   issues: Map<number, FakeIssue>;
   prs: Map<number, FakePr>;
   checks: Map<string, CheckStatus>;
+  /** Pull requests whose changes each branch contains (release PRs carry the integration branch's merged PRs). */
+  merged: Map<string, number[]>;
   runs: WorkflowRunInfo[];
   pending: Map<number, PendingDeploymentInfo[]>;
   environments: Map<string, { reviewerUserIds: number[]; branches: string[]; vars: Record<string, string> }>;
@@ -68,8 +80,20 @@ export class InMemoryGitHub implements GitHubPort {
     return this.repos.get(repoSlug(r).toLowerCase())?.info ?? null;
   }
 
-  async createRepository(input: { owner: string; name: string; description?: string; private: boolean; ownerIsOrg: boolean }) {
-    const info: RepoInfo = { owner: input.owner, name: input.name, url: `https://github.com/${input.owner}/${input.name}`, defaultBranch: "main", private: input.private };
+  async createRepository(input: {
+    owner: string;
+    name: string;
+    description?: string;
+    private: boolean;
+    ownerIsOrg: boolean;
+  }) {
+    const info: RepoInfo = {
+      owner: input.owner,
+      name: input.name,
+      url: `https://github.com/${input.owner}/${input.name}`,
+      defaultBranch: "main",
+      private: input.private,
+    };
     const head = sha();
     this.repos.set(repoSlug(info).toLowerCase(), {
       info,
@@ -80,6 +104,7 @@ export class InMemoryGitHub implements GitHubPort {
       issues: new Map(),
       prs: new Map(),
       checks: new Map(),
+      merged: new Map(),
       runs: [],
       pending: new Map(),
       environments: new Map(),
@@ -88,7 +113,15 @@ export class InMemoryGitHub implements GitHubPort {
     return info;
   }
 
-  async commitFiles(r: RepoRef, input: { branch: string; baseBranch?: string; message: string; files: Array<{ path: string; content: string }> }) {
+  async commitFiles(
+    r: RepoRef,
+    input: {
+      branch: string;
+      baseBranch?: string;
+      message: string;
+      files: Array<{ path: string; content: string }>;
+    },
+  ) {
     const repo = this.repo(r);
     if (!repo.branches.has(input.branch)) {
       const base = input.baseBranch && repo.branches.get(input.baseBranch);
@@ -136,7 +169,11 @@ export class InMemoryGitHub implements GitHubPort {
     return { ...issue };
   }
 
-  async updateIssue(r: RepoRef, n: number, input: { title?: string; body?: string; state?: "open" | "closed" }) {
+  async updateIssue(
+    r: RepoRef,
+    n: number,
+    input: { title?: string; body?: string; state?: "open" | "closed" },
+  ) {
     const issue = this.repo(r).issues.get(n);
     if (!issue) throw Object.assign(new Error("issue not found"), { status: 404 });
     Object.assign(issue, Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)));
@@ -154,7 +191,8 @@ export class InMemoryGitHub implements GitHubPort {
   }
 
   async assignToCopilot(r: RepoRef, n: number, assignment: CodingAssignment) {
-    if (!this.copilotEnabled) throw Object.assign(new Error("copilot-swe-agent is not assignable"), { status: 422 });
+    if (!this.copilotEnabled)
+      throw Object.assign(new Error("copilot-swe-agent is not assignable"), { status: 422 });
     const issue = this.repo(r).issues.get(n);
     if (!issue) throw Object.assign(new Error("issue not found"), { status: 404 });
     issue.assignees.push(COPILOT_AGENT_LOGIN);
@@ -163,7 +201,11 @@ export class InMemoryGitHub implements GitHubPort {
   }
 
   /** Simulates Copilot cloud agent finishing an issue: ready PR with passing checks. */
-  simulateCopilotPullRequest(r: RepoRef, issueNumber: number, opts: { checks?: "success" | "failure" | "pending"; draft?: boolean } = {}): PullRequestInfo {
+  simulateCopilotPullRequest(
+    r: RepoRef,
+    issueNumber: number,
+    opts: { checks?: "success" | "failure" | "pending"; draft?: boolean } = {},
+  ): PullRequestInfo {
     const repo = this.repo(r);
     const issue = repo.issues.get(issueNumber);
     if (!issue) throw new Error("issue not found");
@@ -178,13 +220,35 @@ export class InMemoryGitHub implements GitHubPort {
       draft: opts.draft ?? false,
       author: "Copilot",
       linkedIssues: [issueNumber],
-      diff: `diff --git a/src/${head}.ts b/src/${head}.ts\n+// ${issue.title}\n`,
+      diff: [
+        `diff --git a/src/issue-${issueNumber}.ts b/src/issue-${issueNumber}.ts`,
+        `+// ${issue.title}`,
+        `+export function issue${issueNumber}(): { ok: boolean } {`,
+        "+  return { ok: true };",
+        "+}",
+        `diff --git a/test/issue-${issueNumber}.test.ts b/test/issue-${issueNumber}.test.ts`,
+        `+import { issue${issueNumber} } from "../src/issue-${issueNumber}";`,
+        `+test("${issue.title.replace(/"/g, "'")}", () => expect(issue${issueNumber}().ok).toBe(true));`,
+        "",
+      ].join("\n"),
     });
     this.setChecks(r, pr.headSha, opts.checks ?? "success");
     return { ...pr };
   }
 
-  private addPr(repo: FakeRepo, p: { head: string; base: string; title: string; body: string; draft: boolean; author: string; linkedIssues: number[]; diff: string }): FakePr {
+  private addPr(
+    repo: FakeRepo,
+    p: {
+      head: string;
+      base: string;
+      title: string;
+      body: string;
+      draft: boolean;
+      author: string;
+      linkedIssues: number[];
+      diff: string;
+    },
+  ): FakePr {
     const number = repo.next++;
     const pr: FakePr = {
       number,
@@ -202,6 +266,7 @@ export class InMemoryGitHub implements GitHubPort {
       reviews: [],
       linkedIssues: p.linkedIssues,
       diff: p.diff,
+      ...diffStats(p.diff),
     };
     repo.prs.set(number, pr);
     return pr;
@@ -209,14 +274,21 @@ export class InMemoryGitHub implements GitHubPort {
 
   setChecks(r: RepoRef, ref: string, state: "success" | "failure" | "pending") {
     const checks = [
-      { name: "ci / build-and-test", status: state === "pending" ? "in_progress" : "completed", conclusion: state === "pending" ? null : state },
+      {
+        name: "ci / build-and-test",
+        status: state === "pending" ? "in_progress" : "completed",
+        conclusion: state === "pending" ? null : state,
+      },
       { name: "codeql / analyze", status: "completed", conclusion: "success" },
     ];
     this.repo(r).checks.set(ref, { state: summarizeChecks(checks), checks });
   }
 
   async findPullRequestsForIssue(r: RepoRef, n: number) {
-    return [...this.repo(r).prs.values()].filter((p) => p.linkedIssues.includes(n)).map((p) => ({ ...p })).sort((a, b) => b.number - a.number);
+    return [...this.repo(r).prs.values()]
+      .filter((p) => p.linkedIssues.includes(n))
+      .map((p) => ({ ...p }))
+      .sort((a, b) => b.number - a.number);
   }
 
   async getPullRequest(r: RepoRef, n: number) {
@@ -230,14 +302,35 @@ export class InMemoryGitHub implements GitHubPort {
   }
 
   async findOpenPullRequest(r: RepoRef, head: string, base: string) {
-    const pr = [...this.repo(r).prs.values()].find((p) => p.state === "open" && p.headRef === head && p.baseRef === base);
+    const pr = [...this.repo(r).prs.values()].find(
+      (p) => p.state === "open" && p.headRef === head && p.baseRef === base,
+    );
     return pr ? { ...pr } : null;
   }
 
-  async createPullRequest(r: RepoRef, input: { head: string; base: string; title: string; body: string; draft?: boolean }) {
+  async createPullRequest(
+    r: RepoRef,
+    input: { head: string; base: string; title: string; body: string; draft?: boolean },
+  ) {
     const repo = this.repo(r);
-    if (!repo.branches.has(input.head)) throw Object.assign(new Error(`head ${input.head} not found`), { status: 422 });
-    const pr = this.addPr(repo, { ...input, draft: input.draft ?? false, author: this.viewer.login, linkedIssues: [], diff: `diff --git a/CHANGELOG.md\n+release ${input.head} -> ${input.base}\n` });
+    if (!repo.branches.has(input.head))
+      throw Object.assign(new Error(`head ${input.head} not found`), { status: 422 });
+    // A branch-to-branch PR (e.g. develop → main) contains every PR merged into head but not yet into base.
+    const inBase = new Set(repo.merged.get(input.base) ?? []);
+    const included = (repo.merged.get(input.head) ?? [])
+      .filter((n) => !inBase.has(n))
+      .map((n) => repo.prs.get(n)!.diff);
+    const diff = [
+      ...included,
+      `diff --git a/CHANGELOG.md b/CHANGELOG.md\n+release ${input.head} -> ${input.base}\n`,
+    ].join("");
+    const pr = this.addPr(repo, {
+      ...input,
+      draft: input.draft ?? false,
+      author: this.viewer.login,
+      linkedIssues: [],
+      diff,
+    });
     this.setChecks(r, pr.headSha, "success");
     return { ...pr };
   }
@@ -252,12 +345,23 @@ export class InMemoryGitHub implements GitHubPort {
     if (pr) pr.draft = false;
   }
 
-  async createReview(r: RepoRef, n: number, input: { event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT"; body: string; comments?: Array<{ path: string; line: number; body: string }> }) {
+  async createReview(
+    r: RepoRef,
+    n: number,
+    input: {
+      event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+      body: string;
+      comments?: Array<{ path: string; line: number; body: string }>;
+    },
+  ) {
     const pr = this.repo(r).prs.get(n);
     if (!pr) throw Object.assign(new Error("pull request not found"), { status: 404 });
     if (input.event === "COMMENT") return;
     const state = input.event === "APPROVE" ? "APPROVED" : "CHANGES_REQUESTED";
-    pr.reviews = [...pr.reviews.filter((x) => x.author !== this.viewer.login), { author: this.viewer.login, state }];
+    pr.reviews = [
+      ...pr.reviews.filter((x) => x.author !== this.viewer.login),
+      { author: this.viewer.login, state },
+    ];
   }
 
   async createIssueComment(r: RepoRef, n: number, body: string) {
@@ -270,11 +374,15 @@ export class InMemoryGitHub implements GitHubPort {
     if (!pr || pr.state !== "open") return { merged: false, sha: null, message: "Pull request is not open" };
     if (pr.draft) return { merged: false, sha: null, message: "Pull request is still a draft" };
     const checks = repo.checks.get(pr.headSha);
-    if (checks && checks.state === "failure") return { merged: false, sha: null, message: "Required checks failed" };
+    if (checks && checks.state === "failure")
+      return { merged: false, sha: null, message: "Required checks failed" };
     const mergeSha = sha();
     pr.merged = true;
     pr.state = "closed";
     repo.branches.set(pr.baseRef, mergeSha);
+    repo.merged.set(pr.baseRef, [
+      ...new Set([...(repo.merged.get(pr.baseRef) ?? []), ...(repo.merged.get(pr.headRef) ?? []), pr.number]),
+    ]);
     for (const i of pr.linkedIssues) {
       const issue = repo.issues.get(i);
       if (issue) issue.state = "closed";
@@ -290,10 +398,11 @@ export class InMemoryGitHub implements GitHubPort {
     const isProd = branch === repo.info.defaultBranch;
     const env = isProd ? "production" : "staging";
     const needsApproval = isProd && (repo.environments.get("production")?.reviewerUserIds.length ?? 0) > 0;
+    const id = this.runSeq++;
     const run: WorkflowRunInfo = {
-      id: this.runSeq++,
+      id,
       name: `deploy-${env}`,
-      url: `${repo.info.url}/actions/runs/${this.runSeq}`,
+      url: `${repo.info.url}/actions/runs/${id}`,
       status: needsApproval ? "waiting" : "completed",
       conclusion: needsApproval ? null : "success",
       branch,
@@ -313,26 +422,43 @@ export class InMemoryGitHub implements GitHubPort {
   }
 
   async listWorkflowRuns(r: RepoRef, input: { branch?: string; status?: string } = {}) {
-    return this.repo(r).runs.filter((w) => (!input.branch || w.branch === input.branch) && (!input.status || w.status === input.status)).map((w) => ({ ...w }));
+    return this.repo(r)
+      .runs.filter(
+        (w) => (!input.branch || w.branch === input.branch) && (!input.status || w.status === input.status),
+      )
+      .map((w) => ({ ...w }));
   }
 
   async getPendingDeployments(r: RepoRef, runId: number) {
     return [...(this.repo(r).pending.get(runId) ?? [])];
   }
 
-  async reviewPendingDeployments(r: RepoRef, runId: number, input: { environmentIds: number[]; state: "approved" | "rejected"; comment: string }) {
+  async reviewPendingDeployments(
+    r: RepoRef,
+    runId: number,
+    input: { environmentIds: number[]; state: "approved" | "rejected"; comment: string },
+  ) {
     const repo = this.repo(r);
     const run = repo.runs.find((w) => w.id === runId);
-    if (!run || !repo.pending.has(runId)) throw Object.assign(new Error("no pending deployments"), { status: 422 });
+    if (!run || !repo.pending.has(runId))
+      throw Object.assign(new Error("no pending deployments"), { status: 422 });
     repo.pending.delete(runId);
     run.status = "completed";
     run.conclusion = input.state === "approved" ? "success" : "cancelled";
   }
 
-  async ensureEnvironment(r: RepoRef, name: string, input: { reviewerUserIds?: number[]; branches?: string[] }) {
+  async ensureEnvironment(
+    r: RepoRef,
+    name: string,
+    input: { reviewerUserIds?: number[]; branches?: string[] },
+  ) {
     const repo = this.repo(r);
     const prev = repo.environments.get(name);
-    repo.environments.set(name, { reviewerUserIds: input.reviewerUserIds ?? [], branches: input.branches ?? [], vars: prev?.vars ?? {} });
+    repo.environments.set(name, {
+      reviewerUserIds: input.reviewerUserIds ?? [],
+      branches: input.branches ?? [],
+      vars: prev?.vars ?? {},
+    });
   }
 
   async setEnvironmentVariable(r: RepoRef, environment: string, name: string, value: string) {
@@ -341,7 +467,11 @@ export class InMemoryGitHub implements GitHubPort {
     env.vars[name] = value;
   }
 
-  async protectBranch(r: RepoRef, branch: string, input: { requiredChecks: string[]; requireReviews: boolean }) {
+  async protectBranch(
+    r: RepoRef,
+    branch: string,
+    input: { requiredChecks: string[]; requireReviews: boolean },
+  ) {
     this.repo(r).protections.set(branch, input);
   }
 }

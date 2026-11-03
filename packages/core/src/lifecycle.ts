@@ -1,4 +1,4 @@
-import type { ApprovalKind, DocumentKind } from "./domain";
+import { isOneOf, type ApprovalKind, type DocumentKind } from "./domain";
 
 /** Stage-gate product lifecycle. Each stage produces deliverables; gated stages need CEO approval before advancing. */
 export const LIFECYCLE_STAGES = [
@@ -158,6 +158,12 @@ export function nextStage(
     return candidate;
   }
   return null;
+}
+
+/** The lifecycle stage an approval gates (from its `payload.stage`), or null when it is not a stage gate. */
+export function gatedStage(kind: ApprovalKind, payload: Record<string, unknown>): LifecycleStage | null {
+  const stage = payload.stage;
+  return isOneOf(LIFECYCLE_STAGES, stage) && STAGES[stage].gate === kind ? stage : null;
 }
 
 export const GATE_LABELS: Record<ApprovalKind, string> = {

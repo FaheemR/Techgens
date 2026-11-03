@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { evaluateBudget, periodStart, creditsToNano, nanoToCredits } from "./budget";
-import { nextStage, STAGES, LIFECYCLE_STAGES, isGateEnabled } from "./lifecycle";
+import { evaluateBudget, periodEnd, periodStart, creditsToNano, nanoToCredits } from "./budget";
+import { gatedStage, nextStage, STAGES, LIFECYCLE_STAGES, isGateEnabled } from "./lifecycle";
 import { fillTemplate, slugify } from "./util";
 
 describe("lifecycle", () => {
@@ -28,6 +28,13 @@ describe("lifecycle", () => {
     expect(isGateEnabled(undefined, "spec")).toBe(true);
     expect(isGateEnabled({ spec: false }, "spec")).toBe(false);
   });
+
+  it("recognises stage-gate approvals from their payload", () => {
+    expect(gatedStage("vision_roadmap", { stage: "intake" })).toBe("intake");
+    expect(gatedStage("spec", { stage: "intake" })).toBeNull();
+    expect(gatedStage("budget_overrun", { budgetId: "b" })).toBeNull();
+    expect(gatedStage("decision", { stage: "nope" })).toBeNull();
+  });
 });
 
 describe("budget", () => {
@@ -47,6 +54,14 @@ describe("budget", () => {
     expect(periodStart("day", now).toISOString()).toBe("2026-11-05T00:00:00.000Z");
     expect(periodStart("week", now).toISOString()).toBe("2026-11-02T00:00:00.000Z");
     expect(periodStart("month", now).toISOString()).toBe("2026-11-01T00:00:00.000Z");
+  });
+
+  it("computes UTC period ends (grants expire there)", () => {
+    const now = new Date("2026-12-31T23:59:00Z"); // Thursday
+    expect(periodEnd("day", now)?.toISOString()).toBe("2027-01-01T00:00:00.000Z");
+    expect(periodEnd("week", now)?.toISOString()).toBe("2027-01-04T00:00:00.000Z");
+    expect(periodEnd("month", now)?.toISOString()).toBe("2027-01-01T00:00:00.000Z");
+    expect(periodEnd("total", now)).toBeNull();
   });
 });
 

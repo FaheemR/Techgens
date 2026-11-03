@@ -24,7 +24,12 @@ export interface BudgetEvaluation {
 export function evaluateBudget(spentNanoAiu: number, limitCredits: number, warnPct = 80): BudgetEvaluation {
   const spentCredits = nanoToCredits(spentNanoAiu);
   if (limitCredits <= 0) {
-    return { state: spentCredits > 0 ? "exceeded" : "ok", spentCredits, limitCredits, ratio: spentCredits > 0 ? Infinity : 0 };
+    return {
+      state: spentCredits > 0 ? "exceeded" : "ok",
+      spentCredits,
+      limitCredits,
+      ratio: spentCredits > 0 ? Infinity : 0,
+    };
   }
   const ratio = spentCredits / limitCredits;
   const state: BudgetState = ratio >= 1 ? "exceeded" : ratio * 100 >= warnPct ? "warn" : "ok";
@@ -48,6 +53,24 @@ export function periodStart(period: BudgetPeriod, now: Date = new Date()): Date 
       return new Date(0);
   }
 }
+
+/** End (exclusive, UTC) of the accounting window containing `now`; null for `total` budgets, whose window never ends. */
+export function periodEnd(period: BudgetPeriod, now: Date = new Date()): Date | null {
+  const start = periodStart(period, now);
+  switch (period) {
+    case "day":
+      return new Date(start.getTime() + 86_400_000);
+    case "week":
+      return new Date(start.getTime() + 7 * 86_400_000);
+    case "month":
+      return new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+    case "total":
+      return null;
+  }
+}
+
+/** Cap applied to agent-created initiatives when the CEO's directive names no budget. */
+export const DEFAULT_INITIATIVE_BUDGET_CREDITS = 100;
 
 export function formatCredits(credits: number): string {
   if (credits === 0) return "0";
