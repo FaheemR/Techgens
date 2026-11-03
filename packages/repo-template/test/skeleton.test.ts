@@ -28,10 +28,12 @@ const vitest = toolPath("vitest", "vitest.mjs");
 const toolchain = Boolean(tsc && vitest && toolPath("@types/node", "index.d.ts"));
 const PRODUCT_NAME = 'Acme "Notes" <Beta> & Friends — ünïcode';
 
-/** Child processes must not inherit the parent Vitest worker's state. */
-const childEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => !/^(VITEST|TINYPOOL)|^NODE_OPTIONS$/.test(key)),
-);
+/** Child processes must not inherit the parent Vitest worker's state, nor CI's forced colour output. */
+const childEnv = {
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(VITEST|TINYPOOL)|^NODE_OPTIONS$|^FORCE_COLOR$/.test(key))),
+  NO_COLOR: "1",
+};
+const stripAnsi = (text: string) => text.replace(/\u001b\[[0-9;]*m/g, "");
 
 describe.skipIf(!toolchain)("generated product skeleton (built and tested with its own scripts)", () => {
   const dir = join(
@@ -47,7 +49,7 @@ describe.skipIf(!toolchain)("generated product skeleton (built and tested with i
       encoding: "utf8",
       timeout: 120_000,
     });
-    return { status: result.status, output: `${result.stdout}\n${result.stderr}` };
+    return { status: result.status, output: stripAnsi(`${result.stdout}\n${result.stderr}`) };
   }
 
   beforeAll(() => {
