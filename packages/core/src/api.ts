@@ -88,6 +88,8 @@ export interface InitiativeSummaryDTO {
   directive: string;
   stage: LifecycleStage;
   status: InitiativeStatus;
+  /** Why the initiative is in its current status, e.g. "Rejected at Vision & roadmap: …". */
+  statusReason: string | null;
   productId: string | null;
   productName: string | null;
   targetDate: string | null;

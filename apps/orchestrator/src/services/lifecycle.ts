@@ -268,6 +268,7 @@ export class LifecycleService {
         directive: r.directive,
         stage: r.stage,
         status: r.status,
+        statusReason: null,
         productId: r.productId,
         productName: r.productId ? (productName.get(r.productId) ?? null) : null,
         targetDate: r.targetDate?.toISOString() ?? null,

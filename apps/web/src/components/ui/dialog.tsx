@@ -21,7 +21,12 @@ function useNativeDialog(open: boolean) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (open && !el.open) el.showModal();
+    if (open && !el.open) {
+      el.showModal();
+      // React's autoFocus ran while the dialog was still hidden, and showModal() then focused the first focusable
+      // element (the close button). Hand focus to the field that asked for it.
+      el.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+    }
     if (!open && el.open) el.close();
   }, [open]);
   return ref;

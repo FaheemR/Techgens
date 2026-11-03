@@ -19,7 +19,14 @@ export function Input({
   ref,
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { ref?: Ref<HTMLInputElement> }) {
-  return <input ref={ref} className={cn(FIELD_BASE, "h-9 px-3", className)} {...props} />;
+  return (
+    <input
+      ref={ref}
+      className={cn(FIELD_BASE, "h-9 px-3", className)}
+      data-autofocus={props.autoFocus || undefined}
+      {...props}
+    />
+  );
 }
 
 export function Textarea({
@@ -31,6 +38,7 @@ export function Textarea({
     <textarea
       ref={ref}
       className={cn(FIELD_BASE, "min-h-20 px-3 py-2 leading-relaxed", className)}
+      data-autofocus={props.autoFocus || undefined}
       {...props}
     />
   );
@@ -44,7 +52,12 @@ export function Select({
 }: SelectHTMLAttributes<HTMLSelectElement> & { ref?: Ref<HTMLSelectElement> }) {
   return (
     <div className={cn("relative", className)}>
-      <select ref={ref} className={cn(FIELD_BASE, "h-9 cursor-pointer appearance-none pl-3 pr-8")} {...props}>
+      <select
+        ref={ref}
+        className={cn(FIELD_BASE, "h-9 cursor-pointer appearance-none pl-3 pr-8")}
+        data-autofocus={props.autoFocus || undefined}
+        {...props}
+      >
         {children}
       </select>
       <ChevronDown
