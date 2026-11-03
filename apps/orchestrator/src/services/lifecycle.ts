@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import {
   DomainError,
   GATE_LABELS,
@@ -298,6 +298,13 @@ export class LifecycleService {
         .update(schema.initiatives)
         .set({ status: "completed", statusReason: null, completedAt: new Date(), updatedAt: new Date() })
         .where(eq(schema.initiatives.id, ini.id));
+      // Milestones carry no stage mapping; a completed initiative delivered all of them.
+      await this.app.db
+        .update(schema.milestones)
+        .set({ status: "done" })
+        .where(and(eq(schema.milestones.initiativeId, ini.id), ne(schema.milestones.status, "done")));
+      // Earlier paused/blocked notices are stale now; only the completion notice below is news.
+      await this.app.notifications.markInitiativeRead(ini.id);
       await this.app.bus.emit({
         type: "initiative.updated",
         subjectType: "initiative",
@@ -389,6 +396,8 @@ export class LifecycleService {
     const latestGate = !remembered && gate ? await this.app.approvals.latest(id, gate) : null;
     const rejected = remembered ?? (latestGate?.status === "rejected" ? latestGate : null);
     const row = await this.setStatus(id, "active");
+    // Its "paused"/"blocked" notices are no longer actionable once the CEO resumed it.
+    await this.app.notifications.markInitiativeRead(id);
     const open = await this.app.db
       .select()
       .from(schema.jobs)
@@ -439,6 +448,7 @@ export class LifecycleService {
       (w) => w.status !== "done" && w.status !== "cancelled",
     );
     for (const w of unfinished) await this.app.work.update(w.id, { status: "cancelled" });
+    await this.app.notifications.markInitiativeRead(id);
     return this.get(id);
   }
 
@@ -446,17 +456,30 @@ export class LifecycleService {
     id: string,
     patch: { title?: string; summary?: string; targetDate?: string | null; budgetCredits?: number | null },
   ): Promise<Initiative> {
+    await this.get(id);
     const values: Partial<Initiative> = { updatedAt: new Date() };
     if (patch.title !== undefined) values.title = patch.title;
     if (patch.summary !== undefined) values.summary = patch.summary;
     if (patch.targetDate !== undefined)
       values.targetDate = patch.targetDate ? new Date(patch.targetDate) : null;
     if (patch.budgetCredits !== undefined) {
-      values.budgetCredits = patch.budgetCredits;
-      if (patch.budgetCredits)
+      // One budget record per initiative: the cap is its total budget (also edited on the Budget page), and
+      // `budget_credits` follows it (BudgetService syncs the column).
+      const cap = await this.app.budget.initiativeCap(id);
+      const enforced = cap?.enabled ? cap.limitCredits : null;
+      if (patch.budgetCredits === null) {
+        if (cap) await this.app.budget.deleteBudget(cap.id);
+      } else if (patch.budgetCredits !== enforced) {
         await this.app.budget.upsertBudgets([
-          { scope: "initiative", scopeId: id, period: "total", limitCredits: patch.budgetCredits },
+          {
+            scope: "initiative",
+            scopeId: id,
+            period: "total",
+            limitCredits: patch.budgetCredits,
+            warnPct: cap?.warnPct,
+          },
         ]);
+      }
     }
     const [row] = await this.app.db
       .update(schema.initiatives)
@@ -483,7 +506,7 @@ export class LifecycleService {
   async summaries(rows: Initiative[]): Promise<InitiativeSummaryDTO[]> {
     const ids = rows.map((r) => r.id);
     if (!ids.length) return [];
-    const [counts, pending, spend, products] = await Promise.all([
+    const [counts, pending, spend, products, caps] = await Promise.all([
       this.app.db
         .select({
           id: schema.workItems.initiativeId,
@@ -500,6 +523,7 @@ export class LifecycleService {
         .groupBy(schema.approvals.initiativeId),
       this.app.budget.initiativeSpend(ids),
       this.app.company.listProducts(),
+      this.app.budget.initiativeCaps(ids),
     ]);
     const productName = new Map(products.map((p) => [p.id, p.name]));
     return rows.map((r) => {
@@ -516,7 +540,9 @@ export class LifecycleService {
         productId: r.productId,
         productName: r.productId ? (productName.get(r.productId) ?? null) : null,
         targetDate: r.targetDate?.toISOString() ?? null,
-        budgetCredits: r.budgetCredits,
+        // The enforced cap (the initiative's total budget record) and the CEO's grants on it.
+        budgetCredits: caps.get(r.id)?.limitCredits ?? null,
+        grantedCredits: caps.get(r.id)?.grantedCredits ?? 0,
         spentCredits: spend.get(r.id) ?? 0,
         // Same items as the Work items tab (GET /api/work-items?initiativeId=…), stage items included.
         workItems: {

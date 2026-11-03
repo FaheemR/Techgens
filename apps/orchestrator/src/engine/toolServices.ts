@@ -6,6 +6,7 @@ import {
   STAGES,
   formatCredits,
   truncate,
+  type ApprovalKind,
 } from "@techgens/core";
 import { buildSystemPrompt } from "@techgens/agents";
 import { buildAgentTools, type ToolCaller, type ToolServices } from "@techgens/tools";
@@ -15,6 +16,8 @@ import { roleDefinition } from "../services/org";
 import { delegationBrief } from "./prompts";
 import type { JobEngine } from "./jobs";
 
+/** Gates that approve documents; re-requesting one after approval would only repeat the CEO's decision. */
+const DOCUMENT_GATES: readonly ApprovalKind[] = ["vision_roadmap", "spec", "architecture"];
 const normalize = (s: string) =>
   s
     .toLowerCase()
@@ -208,6 +211,15 @@ export function createToolServices(app: Techgens, engine: JobEngine): ToolServic
 
     async requestApproval(c, i) {
       const ini = c.initiativeId ? await app.lifecycle.get(c.initiativeId) : null;
+      // A document gate the CEO already approved in this stage is never opened twice (e.g. an agent that lost track
+      // after a budget pause): the agent gets the existing decision and continues.
+      if (ini && DOCUMENT_GATES.includes(i.kind) && STAGES[ini.stage].gate === i.kind) {
+        const approved = await app.approvals.approvedGate(ini.id, i.kind, ini.stage);
+        if (approved) {
+          engine.turnState(c.jobId).awaitingApprovalId = approved.id;
+          return { approvalId: approved.id, autoApproved: false, alreadyApproved: true };
+        }
+      }
       const docs = await Promise.all(i.documentIds.map((id) => app.docs.get(id).catch(() => null)));
       const missing = i.documentIds.filter((_, n) => !docs[n]);
       if (missing.length)
@@ -459,7 +471,7 @@ async function statusReport(app: Techgens, initiativeId: string | null): Promise
       `# ${d.title} — ${d.status}${d.statusReason ? ` (${d.statusReason})` : ""}, stage ${d.stage}`,
       `Stages: ${d.stages.map((s) => `${s.stage}:${s.state}`).join(", ")}`,
       `Work items: ${d.workItems.done}/${d.workItems.total} done, ${d.workItems.inProgress} in progress, ${d.workItems.blocked} blocked`,
-      `Spend: ${formatCredits(d.spentCredits)}${d.budgetCredits ? ` of ${d.budgetCredits}` : ""} credits`,
+      `Spend: ${formatCredits(d.spentCredits)}${d.budgetCredits ? ` of ${formatCredits(d.budgetCredits)}${d.grantedCredits ? ` + ${formatCredits(d.grantedCredits)} granted` : ""}` : ""} credits`,
       `Pending approvals: ${
         d.approvals
           .filter((a) => a.status === "pending")
@@ -494,7 +506,7 @@ async function statusReport(app: Techgens, initiativeId: string | null): Promise
     ...(inis.length
       ? inis.map(
           (x) =>
-            `- ${x.title} (id ${x.id}): ${x.status}${x.statusReason ? ` (${x.statusReason})` : ""}, stage ${x.stage}, work ${x.workItems.done}/${x.workItems.total}, spent ${formatCredits(x.spentCredits)}${x.budgetCredits ? ` of ${formatCredits(x.budgetCredits)}` : ""} credits`,
+            `- ${x.title} (id ${x.id}): ${x.status}${x.statusReason ? ` (${x.statusReason})` : ""}, stage ${x.stage}, work ${x.workItems.done}/${x.workItems.total}, spent ${formatCredits(x.spentCredits)}${x.budgetCredits ? ` of ${formatCredits(x.budgetCredits)}${x.grantedCredits ? ` + ${formatCredits(x.grantedCredits)} granted` : ""}` : ""} credits`,
         )
       : ["- No initiatives yet."]),
     `Pending CEO approvals: ${pending.map((a) => approvalHeadline(a.kind, a.title)).join("; ") || "none"}`,

@@ -193,7 +193,11 @@ describe("governance: rejected and cancelled initiatives", () => {
     const inis = (await app.lifecycle.list()).length;
     const products = (await app.company.listProducts()).length;
     const thread = await directive(app, "What is our total spend so far?");
-    expect((await app.chat.messages(thread.id)).at(-1)!.content).toMatch(/^Here's where we stand/);
+    const reply = (await app.chat.messages(thread.id)).at(-1)!.content;
+    expect(reply).toMatch(/^Here's where we stand/);
+    expect(reply).toMatch(/SpendWise MVP/);
+    // Replies to the CEO never show ids (the agent-facing status tool output keeps them).
+    expect(reply).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\(id /);
     expect(await app.lifecycle.list()).toHaveLength(inis);
     expect(await app.company.listProducts()).toHaveLength(products);
   });
@@ -265,13 +269,11 @@ describe("governance: budget grants and notifications", () => {
     await app.approvals.decide(overrun!.id, { outcome: "approved" });
     await app.engine.runUntilIdle();
     const decided = await app.approvals.get(overrun!.id);
-    expect(decided.decisionComment).toMatch(
-      /^Granted 10 extra credits for today \(until \d{4}-\d{2}-\d{2} 00:00 UTC\)\.$/,
-    );
+    expect(decided.decisionComment).toMatch(/^Granted 10 credits until 00:00 UTC\.$/);
     expect(decided.payload).toMatchObject({ grantedExtraCredits: 10 });
     expect(await unreadApprovalNotifications(app, overrun!.id)).toEqual([]);
     const event = (await app.bus.list({ subjectType: "approval", subjectId: overrun!.id }))[0]!;
-    expect(event.summary).toMatch(/Granted 10 extra credits for today/);
+    expect(event.summary).toMatch(/Granted 10 credits until 00:00 UTC\.$/);
 
     const after = (await app.budget.listBudgets()).find((b) => b.id === budget!.id)!;
     expect(after).toMatchObject({ limitCredits: 0.000001, grantedCredits: 10, state: "ok" });

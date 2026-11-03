@@ -164,6 +164,13 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
     const done = await app.lifecycle.detail(ini!.id);
     expect(done.status).toBe("completed");
     expect(done.stages.every((s) => s.state === "done")).toBe(true);
+    // A completed initiative delivered its milestones, and only its completion notice is still news.
+    expect(done.milestones.length).toBeGreaterThan(0);
+    expect(done.milestones.every((m) => m.status === "done")).toBe(true);
+    const notices = (await app.notifications.list(200)).filter(
+      (n) => n.link === `/initiatives/${ini!.id}` && !n.readAt,
+    );
+    expect(notices.map((n) => n.title)).toEqual(["InvoiceLite MVP completed"]);
     expect(
       done.approvals
         .filter((a) => a.status === "approved")

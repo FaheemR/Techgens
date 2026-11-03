@@ -45,7 +45,11 @@ queued ──claim──▶ running ──turn ends──┬─ complete_task �
   agent/role/department/initiative. Before each turn the engine checks company, department, agent, initiative and
   product budgets; at 80 % a warning event is emitted, at 100 % the job waits on a `budget_overrun` approval. Credits
   the CEO grants on approval only extend the current window (`budget_alerts.extra_credits` per window start), so they
-  expire with it. Each job also has a per-session `sessionLimits.maxAiCredits` cap from the role.
+  expire with it. An initiative's cap is its total budget (`initiatives.budget_credits` mirrors it). Each job also has
+  a per-session `sessionLimits.maxAiCredits` cap from the role.
+- **Resume messages** (approval decisions, delegated results, grants) are queued on the job and delivered at least
+  once: a message that could not be delivered yet (e.g. the job then waited on a budget decision) is kept and later
+  messages are appended.
 - **Concurrency**: one running assignment per agent (chat is exempt); global worker concurrency is configurable.
 - **Kill switches**: global pause, per-agent pause/retire, per-initiative pause/cancel, per-job cancel (aborts the
   live session and cascades to children).
@@ -58,7 +62,9 @@ stages (`vision_roadmap`, `spec`, `architecture`, `merge_to_main`, `prod_deploy`
 owner can request approval itself, and if it finishes without one the engine files the gate. CEO decisions resume the
 waiting job (`approved` / `changes_requested` with feedback). `rejected` pauses the initiative (`statusReason`
 "Rejected at <gate>: <comment>") and cancels the stage's jobs; resuming restarts the stage (same stage work item) with
-the CEO's comment as guidance, and the new proposal is a new approval. Cancelling an initiative withdraws its open
+the CEO's comment as guidance, and the new proposal is a new approval. A document gate (`vision_roadmap`, `spec`,
+`architecture`) already approved in the current stage is never opened again: `request_approval` returns the existing
+decision. Cancelling an initiative withdraws its open
 approvals (status `cancelled`). Gates can be switched off in Settings (auto-approved and logged; each policy change is
 recorded as a CEO decision).
 

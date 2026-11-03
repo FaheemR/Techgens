@@ -29,6 +29,16 @@ export interface ApprovalRequest {
   requestedByAgentId?: string | null;
 }
 
+/** Extra credits the CEO typed (number or numeric string, decimals allowed); undefined when none was sent. */
+function extraCreditsOf(value: number | string | null | undefined): number | undefined {
+  if (value === undefined || value === null || (typeof value === "string" && value.trim() === ""))
+    return undefined;
+  const credits = typeof value === "number" ? value : Number(value.trim());
+  if (!Number.isFinite(credits) || credits <= 0)
+    throw new DomainError(`extraCredits must be a positive number of credits (got "${value}")`);
+  return credits;
+}
+
 export class ApprovalService {
   constructor(private readonly app: Techgens) {}
 
@@ -124,7 +134,7 @@ export class ApprovalService {
 
   async decide(
     id: string,
-    input: { outcome: ApprovalOutcome; comment?: string; extraCredits?: number },
+    input: { outcome: ApprovalOutcome; comment?: string; extraCredits?: number | string | null },
     actor: "ceo" | "system" = "ceo",
   ): Promise<Approval> {
     const approval = await this.get(id);
@@ -137,8 +147,9 @@ export class ApprovalService {
     let payload = approval.payload;
     let grantNote = "";
     if (approval.kind === "budget_overrun" && input.outcome === "approved") {
-      // Approving without an amount grants the suggestion; the decision always states what was granted and until when.
-      const granted = input.extraCredits ?? Number(approval.payload.suggestedExtraCredits ?? 0);
+      // An amount the CEO sends always wins; only without one is the suggestion granted. The decision states the grant.
+      const granted =
+        extraCreditsOf(input.extraCredits) ?? Number(approval.payload.suggestedExtraCredits ?? 0);
       payload = { ...payload, grantedExtraCredits: granted };
       grantNote = await this.app.budget.describeGrant(
         typeof approval.payload.budgetId === "string" ? approval.payload.budgetId : null,
@@ -284,18 +295,14 @@ export class ApprovalService {
   }
 
   /** Executes CEO-authorised actions. Returns a note for the waiting agent. */
-  private async applySideEffects(
-    a: Approval,
-    input: { outcome: ApprovalOutcome; extraCredits?: number },
-  ): Promise<string> {
+  private async applySideEffects(a: Approval, input: { outcome: ApprovalOutcome }): Promise<string> {
     const approved = input.outcome === "approved";
     switch (a.kind) {
       case "budget_overrun": {
         // Blocked jobs wait on this approval; JobEngine.onApprovalDecided resumes or fails them.
         if (!approved) return "";
-        const extra = Number(
-          a.payload.grantedExtraCredits ?? input.extraCredits ?? a.payload.suggestedExtraCredits ?? 0,
-        );
+        // decide() recorded the granted amount (explicit or suggested) on the payload.
+        const extra = Number(a.payload.grantedExtraCredits ?? 0);
         if (a.payload.budgetId && extra > 0)
           await this.app.budget.grantExtra(String(a.payload.budgetId), extra);
         return a.decisionComment ?? `Budget extended by ${extra} credits.`;
@@ -406,6 +413,24 @@ export class ApprovalService {
       .from(schema.approvals)
       .where(and(eq(schema.approvals.initiativeId, initiativeId), eq(schema.approvals.kind, kind)))
       .orderBy(desc(schema.approvals.updatedAt))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /** The approved gate of `kind` for the initiative's `stage`, if the CEO already approved it. */
+  async approvedGate(initiativeId: string, kind: ApprovalKind, stage: string): Promise<Approval | null> {
+    const [row] = await this.app.db
+      .select()
+      .from(schema.approvals)
+      .where(
+        and(
+          eq(schema.approvals.initiativeId, initiativeId),
+          eq(schema.approvals.kind, kind),
+          eq(schema.approvals.status, "approved"),
+          sql`${schema.approvals.payload}->>'stage' = ${stage}`,
+        ),
+      )
+      .orderBy(desc(schema.approvals.decidedAt))
       .limit(1);
     return row ?? null;
   }

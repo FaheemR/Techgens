@@ -12,7 +12,8 @@ agents within budget. Everything else is delegated.
    - **Reject** — the initiative pauses with the reason _Rejected at <gate>: <your comment>_. **Resume** restarts that
      stage: its owner proposes a different approach based on your comment and submits a new approval. Or cancel it.
    - Approvals leave the inbox (and their notifications are marked read) as soon as they are decided, auto-approved
-     or withdrawn — cancelling an initiative withdraws its open gates.
+     or withdrawn — cancelling an initiative withdraws its open gates. An initiative's paused/blocked notices are
+     marked read when you resume, cancel or complete it.
 3. **Directives** — talk to the Chief of Staff: new initiatives, priorities, status questions ("where are we on
    InvoiceLite?"). Good directives state the outcome, the user, the deadline and the budget.
 
@@ -48,9 +49,11 @@ the rollback plan and the PRs in the release.
 Copilot usage is measured in **AI credits**. Defaults: company 3,000/month; each agent has a daily budget from its
 role. Add department, product or initiative budgets in **Budget**. At 80 % you get a warning; at 100 % work pauses
 and a _budget overrun_ approval asks you how many extra credits to grant. A grant only extends the current window
-(today, this week or this month) and expires with it — the budget's limit is unchanged; approving without an amount
-grants the suggested credits, and the decision states what was granted. Initiatives created by the Chief of Staff
-always get a total budget cap (100 credits when your directive names none). Choose cheaper models for routine roles in
+(today, this week or this month) and expires with it — the budget's limit is unchanged; the amount you type always
+wins, approving without one grants the suggested credits, and the decision states what was granted ("Granted 10
+credits until 00:00 UTC"). An initiative's budget is one record: editing it on the initiative or on the Budget page
+changes the same cap. Initiatives created by the Chief of Staff always get a total budget cap (100 credits when your
+directive names none). Choose cheaper models for routine roles in
 **Settings → Models**. Also set a spending limit for Copilot in your GitHub billing settings.
 
 ## The org

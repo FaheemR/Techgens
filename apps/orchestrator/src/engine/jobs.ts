@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import {
   DomainError,
   TERMINAL_JOB_STATUSES,
+  formatCredits,
   gatedStage,
   nanoToCredits,
   truncate,
@@ -14,7 +15,7 @@ import {
 import { schema, type Agent, type Approval, type Job, type JobResult, type Role } from "@techgens/db";
 import { RuntimeUnavailableError } from "@techgens/runtime";
 import type { Techgens } from "../app";
-import { fmtCredits, grantWindow } from "../services/budget";
+import { fmtCredits, windowEndText } from "../services/budget";
 import { runJobTurns } from "./runner";
 
 export interface JobDispatcher {
@@ -238,6 +239,7 @@ export class JobEngine {
       });
       const limit = budget.limitCredits + budget.grantedCredits;
       const suggested = Math.max(10, Math.round(limit * 0.5));
+      const windowEnd = windowEndText(budget.period, budget.windowEndsAt);
       const payload: BudgetOverrunPayload = {
         budgetId: budget.id,
         jobIds: [job.id],
@@ -254,7 +256,7 @@ export class JobEngine {
         await this.app.approvals.request({
           kind: "budget_overrun",
           title: `${scopeName}: ${budget.period} budget exceeded`,
-          summary: `Spent ${fmtCredits(budget.spentCredits)} of ${fmtCredits(limit)} AI credits (${budget.scope} · ${budget.period}${budget.grantedCredits ? `, incl. ${fmtCredits(budget.grantedCredits)} already granted` : ""}). Work is paused until you grant extra credits ${grantWindow(budget.period, budget.windowEndsAt)}; suggested: ${suggested}.`,
+          summary: `Spent ${fmtCredits(budget.spentCredits)} of ${fmtCredits(limit)} AI credits (${budget.scope} · ${budget.period}${budget.grantedCredits ? `, incl. ${fmtCredits(budget.grantedCredits)} already granted` : ""}). Work is paused until you grant extra credits${windowEnd ? `; a grant lasts until ${windowEnd}` : " (a grant adds to the total budget)"}. Suggested: ${suggested}.`,
           // Only an initiative's own budget belongs to that initiative; company/agent/department overruns block any job.
           initiativeId: budget.scope === "initiative" ? budget.scopeId : null,
           payload: { ...payload },
@@ -302,12 +304,20 @@ export class JobEngine {
   }
 
   /** Atomically moves a waiting job back to the queue with a message for its next turn. */
+  /**
+   * Atomically moves a job back to the queue with a message for its next turn. A message that was not delivered yet
+   * (e.g. "the CEO approved…" while the job then waited on a budget decision) is kept: new messages are appended.
+   */
   async resume(jobId: string, message: string | null, from: JobStatus[] = ["waiting"]): Promise<boolean> {
     const [row] = await this.app.db
       .update(schema.jobs)
       .set({
         status: "queued",
-        resumeMessage: message,
+        ...(message === null
+          ? {}
+          : {
+              resumeMessage: sql`case when coalesce(${schema.jobs.resumeMessage}, '') = '' then ${message} else ${schema.jobs.resumeMessage} || ${"\n\n"} || ${message} end`,
+            }),
         waitReason: null,
         waitState: {},
         resumeCount: sql`${schema.jobs.resumeCount} + 1`,
@@ -417,10 +427,12 @@ export class JobEngine {
       );
     for (const job of waiting) {
       if (approval.kind === "budget_overrun") {
+        // Jobs that never started have no context to continue; they start with their assignment.
+        const granted = formatCredits(Number(approval.payload.grantedExtraCredits ?? 0));
         if (outcome === "approved")
           await this.resume(
             job.id,
-            job.sessionId ? "The CEO extended your budget. Continue your assignment." : null,
+            job.sessionId ? `The CEO granted ${granted} extra credits; continue where you left off.` : null,
           );
         else await this.finish(job, "failed", undefined, "Budget overrun was not approved by the CEO.");
         continue;

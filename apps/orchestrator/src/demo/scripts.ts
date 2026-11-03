@@ -7,6 +7,15 @@ import { deriveTitle, isQuestion, parseBudget } from "./directives";
  */
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
 const uuidOf = (text: string) => UUID.exec(text)?.[0];
+/** Tool output keeps ids for agents; replies to the CEO never show them ("(id …)" and stray UUIDs are dropped). */
+export const forCeo = (text: string) =>
+  text
+    .replace(
+      /\s*\((?:id|approval|work item|job)\s+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)/gi,
+      "",
+    )
+    .replace(new RegExp(`\\s*${UUID.source}`, "gi"), "")
+    .trim();
 
 function initiativeTitle(ctx: FakeTurnContext): string {
   return (
@@ -116,7 +125,7 @@ export function installDemoScripts(
       // Questions get a short answer and never create work.
       if (isQuestion(ctx.prompt)) {
         const status = await ctx.callTool("get_status", {});
-        return ctx.say(`Here's where we stand:\n\n${status.replace(/^# .*\n/, "").trim()}`);
+        return ctx.say(`Here's where we stand:\n\n${forCeo(status.replace(/^# .*\n/, ""))}`);
       }
       if (ctx.prompt.trim().length < 25)
         return ctx.say(

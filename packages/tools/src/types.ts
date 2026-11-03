@@ -71,7 +71,12 @@ export interface ToolServices {
       documentIds: string[];
       payload?: Record<string, unknown>;
     },
-  ): Promise<{ approvalId: string; autoApproved: boolean }>;
+  ): Promise<{
+    approvalId: string;
+    autoApproved: boolean;
+    /** The CEO already approved this gate for the current stage; no new approval was opened. */
+    alreadyApproved?: boolean;
+  }>;
   completeTask(
     c: ToolCaller,
     i: { summary: string; outcome: "done" | "blocked"; followUps: string[] },
