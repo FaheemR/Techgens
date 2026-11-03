@@ -31,7 +31,8 @@ export interface ApprovalRequest {
 
 /** Extra credits the CEO typed (number or numeric string, decimals allowed); undefined when none was sent. */
 function extraCreditsOf(value: number | string | null | undefined): number | undefined {
-  if (value === undefined || value === null || (typeof value === "string" && value.trim() === "")) return undefined;
+  if (value === undefined || value === null || (typeof value === "string" && value.trim() === ""))
+    return undefined;
   const credits = typeof value === "number" ? value : Number(value.trim());
   if (!Number.isFinite(credits) || credits <= 0)
     throw new DomainError(`extraCredits must be a positive number of credits (got "${value}")`);
@@ -147,7 +148,8 @@ export class ApprovalService {
     let grantNote = "";
     if (approval.kind === "budget_overrun" && input.outcome === "approved") {
       // An amount the CEO sends always wins; only without one is the suggestion granted. The decision states the grant.
-      const granted = extraCreditsOf(input.extraCredits) ?? Number(approval.payload.suggestedExtraCredits ?? 0);
+      const granted =
+        extraCreditsOf(input.extraCredits) ?? Number(approval.payload.suggestedExtraCredits ?? 0);
       payload = { ...payload, grantedExtraCredits: granted };
       grantNote = await this.app.budget.describeGrant(
         typeof approval.payload.budgetId === "string" ? approval.payload.budgetId : null,
@@ -293,10 +295,7 @@ export class ApprovalService {
   }
 
   /** Executes CEO-authorised actions. Returns a note for the waiting agent. */
-  private async applySideEffects(
-    a: Approval,
-    input: { outcome: ApprovalOutcome },
-  ): Promise<string> {
+  private async applySideEffects(a: Approval, input: { outcome: ApprovalOutcome }): Promise<string> {
     const approved = input.outcome === "approved";
     switch (a.kind) {
       case "budget_overrun": {

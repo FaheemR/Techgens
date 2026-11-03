@@ -269,9 +269,7 @@ describe("governance: budget grants and notifications", () => {
     await app.approvals.decide(overrun!.id, { outcome: "approved" });
     await app.engine.runUntilIdle();
     const decided = await app.approvals.get(overrun!.id);
-    expect(decided.decisionComment).toMatch(
-      /^Granted 10 credits until 00:00 UTC\.$/,
-    );
+    expect(decided.decisionComment).toMatch(/^Granted 10 credits until 00:00 UTC\.$/);
     expect(decided.payload).toMatchObject({ grantedExtraCredits: 10 });
     expect(await unreadApprovalNotifications(app, overrun!.id)).toEqual([]);
     const event = (await app.bus.list({ subjectType: "approval", subjectId: overrun!.id }))[0]!;

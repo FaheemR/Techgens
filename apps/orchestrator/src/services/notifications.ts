@@ -77,7 +77,12 @@ export class NotificationService {
     const rows = await this.app.db
       .update(schema.notifications)
       .set({ readAt: new Date() })
-      .where(and(isNull(schema.notifications.readAt), eq(schema.notifications.link, `/initiatives/${initiativeId}`)))
+      .where(
+        and(
+          isNull(schema.notifications.readAt),
+          eq(schema.notifications.link, `/initiatives/${initiativeId}`),
+        ),
+      )
       .returning({ id: schema.notifications.id });
     return rows.length;
   }

@@ -471,7 +471,13 @@ export class LifecycleService {
         if (cap) await this.app.budget.deleteBudget(cap.id);
       } else if (patch.budgetCredits !== enforced) {
         await this.app.budget.upsertBudgets([
-          { scope: "initiative", scopeId: id, period: "total", limitCredits: patch.budgetCredits, warnPct: cap?.warnPct },
+          {
+            scope: "initiative",
+            scopeId: id,
+            period: "total",
+            limitCredits: patch.budgetCredits,
+            warnPct: cap?.warnPct,
+          },
         ]);
       }
     }

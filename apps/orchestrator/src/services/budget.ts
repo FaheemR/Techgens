@@ -46,12 +46,21 @@ export function windowEndText(period: BudgetPeriod, windowEndsAt: Date | string 
   const end = new Date(windowEndsAt);
   const time = `${String(end.getUTCHours()).padStart(2, "0")}:${String(end.getUTCMinutes()).padStart(2, "0")} UTC`;
   if (period === "day") return time;
-  const day = end.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const day = end.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
   return `${day}, ${time}`;
 }
 
 /** "Granted 10 credits until 00:00 UTC." — the decision note of a budget grant. */
-export function grantNote(credits: number, period: BudgetPeriod | null, windowEndsAt: Date | string | null): string {
+export function grantNote(
+  credits: number,
+  period: BudgetPeriod | null,
+  windowEndsAt: Date | string | null,
+): string {
   const amount = `${fmtCredits(credits)} ${credits === 1 ? "credit" : "credits"}`;
   if (!period) return `Granted ${amount}.`;
   const end = windowEndText(period, windowEndsAt);
@@ -329,14 +338,16 @@ export class BudgetService {
           target: [schema.budgets.scope, schema.budgets.scopeId, schema.budgets.period],
           set: { ...values, updatedAt: new Date() },
         });
-      if (values.scope === "initiative" && values.period === "total") await this.syncInitiativeCap(values.scopeId);
+      if (values.scope === "initiative" && values.period === "total")
+        await this.syncInitiativeCap(values.scopeId);
     }
     return this.listBudgets();
   }
 
   async deleteBudget(id: string): Promise<void> {
     const [row] = await this.app.db.delete(schema.budgets).where(eq(schema.budgets.id, id)).returning();
-    if (row?.scope === "initiative" && row.period === "total" && row.scopeId) await this.syncInitiativeCap(row.scopeId);
+    if (row?.scope === "initiative" && row.period === "total" && row.scopeId)
+      await this.syncInitiativeCap(row.scopeId);
   }
 
   /** The initiative's own total budget: its cap. */
@@ -355,7 +366,9 @@ export class BudgetService {
   }
 
   /** Per initiative: the enforced base limit of its total budget (null when none or disabled) and the grants on it. */
-  async initiativeCaps(initiativeIds: string[]): Promise<Map<string, { limitCredits: number | null; grantedCredits: number }>> {
+  async initiativeCaps(
+    initiativeIds: string[],
+  ): Promise<Map<string, { limitCredits: number | null; grantedCredits: number }>> {
     if (!initiativeIds.length) return new Map();
     const rows = await this.app.db
       .select()
@@ -369,7 +382,10 @@ export class BudgetService {
       );
     const grants = rows.length
       ? await this.app.db
-          .select({ budgetId: schema.budgetAlerts.budgetId, extra: sql<string>`sum(${schema.budgetAlerts.extraCredits})` })
+          .select({
+            budgetId: schema.budgetAlerts.budgetId,
+            extra: sql<string>`sum(${schema.budgetAlerts.extraCredits})`,
+          })
           .from(schema.budgetAlerts)
           .where(
             and(
@@ -387,7 +403,10 @@ export class BudgetService {
     return new Map(
       rows.map((r) => [
         r.scopeId!,
-        { limitCredits: r.enabled ? r.limitCredits : null, grantedCredits: r.enabled ? (granted.get(r.id) ?? 0) : 0 },
+        {
+          limitCredits: r.enabled ? r.limitCredits : null,
+          grantedCredits: r.enabled ? (granted.get(r.id) ?? 0) : 0,
+        },
       ]),
     );
   }
@@ -412,7 +431,10 @@ export class BudgetService {
       type: "initiative.updated",
       subjectType: "initiative",
       subjectId: row.id,
-      summary: limit === null ? `${row.title}: budget cap removed` : `${row.title}: budget cap set to ${fmtCredits(limit)} credits`,
+      summary:
+        limit === null
+          ? `${row.title}: budget cap removed`
+          : `${row.title}: budget cap set to ${fmtCredits(limit)} credits`,
       data: { budgetCredits: limit },
     });
   }

@@ -10,7 +10,10 @@ const uuidOf = (text: string) => UUID.exec(text)?.[0];
 /** Tool output keeps ids for agents; replies to the CEO never show them ("(id …)" and stray UUIDs are dropped). */
 export const forCeo = (text: string) =>
   text
-    .replace(/\s*\((?:id|approval|work item|job)\s+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)/gi, "")
+    .replace(
+      /\s*\((?:id|approval|work item|job)\s+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)/gi,
+      "",
+    )
     .replace(new RegExp(`\\s*${UUID.source}`, "gi"), "")
     .trim();
 
