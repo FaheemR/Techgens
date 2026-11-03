@@ -18,6 +18,7 @@ RUN pnpm install --frozen-lockfile --filter "@techgens/orchestrator..." \
 USER 10001
 ENV NODE_ENV=production \
     TECHGENS_DATA_DIR=/data \
+    HOST=0.0.0.0 \
     PORT=4000
 EXPOSE 4000
 VOLUME ["/data"]

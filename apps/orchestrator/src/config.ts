@@ -39,7 +39,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const port = Number(env.PORT ?? 4000);
   return {
     port,
-    host: env.HOST ?? "0.0.0.0",
+    // Loopback by default: the API has no login. The container sets HOST=0.0.0.0 behind a 127.0.0.1 port mapping.
+    host: env.HOST ?? "127.0.0.1",
     databaseUrl: env.DATABASE_URL ?? "postgres://techgens:techgens@localhost:5432/techgens",
     dataDir,
     secretKey: env.TECHGENS_SECRET_KEY ?? loadOrCreateSecretKey(dataDir),

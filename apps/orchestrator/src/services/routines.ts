@@ -82,12 +82,17 @@ export class RoutineService {
 
   async apply(r: Routine): Promise<void> {
     if (!this.scheduler) return;
-    if (r.enabled) await this.scheduler.schedule(`routine:${r.key}`, r.cron, r.id);
-    else await this.scheduler.unschedule(`routine:${r.key}`);
+    // pg-boss schedule keys allow only [A-Za-z0-9_./-].
+    const key = `routine-${r.key}`;
+    if (r.enabled) await this.scheduler.schedule(key, r.cron, r.id);
+    else await this.scheduler.unschedule(key);
   }
 
+  /** Startup sync; a bad schedule (e.g. invalid cron) must not prevent the orchestrator from starting. */
   async applyAll(): Promise<void> {
-    for (const r of await this.list()) await this.apply(r);
+    for (const r of await this.list()) {
+      await this.apply(r).catch((err) => this.app.log.error({ err: (err as Error).message, routine: r.key }, "routine schedule failed"));
+    }
   }
 
   /** Runs a ceremony now: a tracked meeting work item + a job for the owning role. */

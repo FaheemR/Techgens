@@ -157,7 +157,7 @@ export class DeliveryService {
     const { product, repo, port } = await this.repoFor(ini.id);
     const result = await port.mergePullRequest(repo, prNumber, "merge");
     if (!result.merged) throw new Error(`GitHub refused to merge release PR #${prNumber}: ${result.message}`);
-    await this.app.db.insert(schema.deployments).values({ productId: product.id, initiativeId: ini.id, environment: "production", status: "queued", sha: result.sha });
+    // The production deployment row is created from its workflow run (monitor sync / prod_deploy approval).
     await this.app.bus.emit({ type: "deployment.updated", subjectType: "initiative", subjectId: ini.id, summary: `Release #${prNumber} merged into ${product.defaultBranch}; production deploy starting`, data: { sha: result.sha } });
     return `Release PR #${prNumber} merged into ${product.defaultBranch}. The production deployment will wait for the prod_deploy approval.`;
   }

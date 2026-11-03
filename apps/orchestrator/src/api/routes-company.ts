@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { AGENT_STATUSES, DOCUMENT_KINDS, GOAL_STATUSES, GOAL_TYPES, LIFECYCLE_STAGES, REASONING_EFFORTS, AGENT_TOOL_NAMES } from "@techgens/core";
+import { AGENT_STATUSES, DOCUMENT_KINDS, DomainError, GOAL_STATUSES, GOAL_TYPES, LIFECYCLE_STAGES, REASONING_EFFORTS, AGENT_TOOL_NAMES } from "@techgens/core";
 import { generateAzureSetupScript } from "@techgens/azure";
 import type { Techgens } from "../app";
 import { companyDTO, goalDTO, productDTO } from "../services/company";
@@ -54,15 +54,22 @@ export function registerCompanyRoutes(server: FastifyInstance, app: Techgens): v
     const product = await app.company.getProduct(parse(id, req.params).id);
     if (!product.repoOwner || !product.repoName) return { script: "# Bootstrap the GitHub repository first (planning stage or the Bootstrap button).", variables: {}, steps: [] };
     const az = product.azure;
-    return generateAzureSetupScript({
-      subscriptionId: az.subscriptionId ?? "00000000-0000-0000-0000-000000000000",
-      tenantId: az.tenantId,
-      location: az.location ?? "eastus2",
-      githubOwner: product.repoOwner,
-      githubRepo: product.repoName,
-      productSlug: product.slug,
-      resourceGroupPrefix: az.resourceGroupPrefix,
-    });
+    if (!az.subscriptionId) {
+      return { script: "# Set the product's Azure subscription first: PATCH /api/products/:id { azure: { subscriptionId, tenantId?, location } }", variables: {}, steps: [] };
+    }
+    try {
+      return generateAzureSetupScript({
+        subscriptionId: az.subscriptionId,
+        tenantId: az.tenantId,
+        location: az.location ?? "eastus2",
+        githubOwner: product.repoOwner,
+        githubRepo: product.repoName,
+        productSlug: product.slug,
+        resourceGroupPrefix: az.resourceGroupPrefix,
+      });
+    } catch (err) {
+      throw new DomainError((err as Error).message);
+    }
   });
 
   // ---- Initiatives -------------------------------------------------------------------------------------------------
