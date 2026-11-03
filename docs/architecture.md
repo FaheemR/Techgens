@@ -2,14 +2,14 @@
 
 ## Components
 
-| Component | Tech | Responsibility |
-|---|---|---|
-| **Command Center** (`apps/web`) | Next.js 16, React 19, Tailwind 4, TanStack Query, React Flow | CEO UI: dashboard, directives chat, approvals inbox, org chart, work board, documents, strategy, budget, operations, settings. Live updates over SSE. |
-| **Orchestrator** (`apps/orchestrator`) | Fastify 5, Drizzle, pg-boss 12, Copilot SDK | Domain services, job engine, agent tools, delivery monitor, REST/SSE API. |
-| **PostgreSQL** | 17 | All state: company, org, initiatives, work graph, jobs, approvals, documents (versioned, full-text indexed), events, usage ledger, budgets, encrypted secrets, pg-boss queues. |
-| **Copilot runtime** | Copilot CLI (bundled with the SDK, or `ghcr.io/github/copilot-cli` over TCP) | Runs agent sessions with the CEO's Copilot entitlement. |
-| **GitHub** | REST/GraphQL via Octokit | Product repos, issues/sub-issues, Copilot cloud agent assignment, PR reviews/merges, environments, workflow runs. |
-| **Azure** | azd + Bicep (Azure Verified Modules) via GitHub Actions + OIDC | Hosts the products the agents build (Container Apps, ACR, Key Vault, App Insights). |
+| Component                              | Tech                                                                         | Responsibility                                                                                                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Command Center** (`apps/web`)        | Next.js 16, React 19, Tailwind 4, TanStack Query, React Flow                 | CEO UI: dashboard, directives chat, approvals inbox, org chart, work board, documents, strategy, budget, operations, settings. Live updates over SSE.                          |
+| **Orchestrator** (`apps/orchestrator`) | Fastify 5, Drizzle, pg-boss 12, Copilot SDK                                  | Domain services, job engine, agent tools, delivery monitor, REST/SSE API.                                                                                                      |
+| **PostgreSQL**                         | 17                                                                           | All state: company, org, initiatives, work graph, jobs, approvals, documents (versioned, full-text indexed), events, usage ledger, budgets, encrypted secrets, pg-boss queues. |
+| **Copilot runtime**                    | Copilot CLI (bundled with the SDK, or `ghcr.io/github/copilot-cli` over TCP) | Runs agent sessions with the CEO's Copilot entitlement.                                                                                                                        |
+| **GitHub**                             | REST/GraphQL via Octokit                                                     | Product repos, issues/sub-issues, Copilot cloud agent assignment, PR reviews/merges, environments, workflow runs.                                                              |
+| **Azure**                              | azd + Bicep (Azure Verified Modules) via GitHub Actions + OIDC               | Hosts the products the agents build (Container Apps, ACR, Key Vault, App Insights).                                                                                            |
 
 ## Packages
 
@@ -32,22 +32,22 @@ queued ──claim──▶ running ──turn ends──┬─ complete_task �
    └──────────────────────────────── resume(message) ◀──────────────────────────────────────────────────┘
 ```
 
-* **Sessions**: one Copilot SDK session per job (`systemMessage` = company context + role persona + team + operating
+- **Sessions**: one Copilot SDK session per job (`systemMessage` = company context + role persona + team + operating
   rules + memories). Resumes reuse the same session (persisted by the runtime), so agents keep their context for days.
   Chat threads with the Chief of Staff keep one session per thread.
-* **Tools**: only Techgens tools (`availableTools: custom:*`, plus `web_fetch` for research roles) and role allowlists.
-  `complete_task`, `request_approval` and `escalate` are *terminal* tools that end the turn.
-* **Delegation**: `delegate_task` creates a child work item + job (depth + 1). The parent waits and is resumed with all
+- **Tools**: only Techgens tools (`availableTools: custom:*`, plus `web_fetch` for research roles) and role allowlists.
+  `complete_task`, `request_approval` and `escalate` are _terminal_ tools that end the turn.
+- **Delegation**: `delegate_task` creates a child work item + job (depth + 1). The parent waits and is resumed with all
   children's results. Guardrails: max depth (default 4), max fan-out (8), no delegating up the chain, loop detection,
   coding work must go through `assign_to_coding_agent`.
-* **Consultation**: `ask_agent` runs a short read-only session for the colleague and returns the answer inline.
-* **Budgets**: every `assistant.usage` event (nano-AIU → AI credits) is written to `usage_ledger` with
+- **Consultation**: `ask_agent` runs a short read-only session for the colleague and returns the answer inline.
+- **Budgets**: every `assistant.usage` event (nano-AIU → AI credits) is written to `usage_ledger` with
   agent/role/department/initiative. Before each turn the engine checks company, department, agent, initiative and
   product budgets; at 80 % a warning event is emitted, at 100 % the job waits on a `budget_overrun` approval. Credits
   the CEO grants on approval only extend the current window (`budget_alerts.extra_credits` per window start), so they
   expire with it. Each job also has a per-session `sessionLimits.maxAiCredits` cap from the role.
-* **Concurrency**: one running assignment per agent (chat is exempt); global worker concurrency is configurable.
-* **Kill switches**: global pause, per-agent pause/retire, per-initiative pause/cancel, per-job cancel (aborts the
+- **Concurrency**: one running assignment per agent (chat is exempt); global worker concurrency is configurable.
+- **Kill switches**: global pause, per-agent pause/retire, per-initiative pause/cancel, per-job cancel (aborts the
   live session and cascades to children).
 
 ## Lifecycle and gates
@@ -67,22 +67,22 @@ Side effects executed with the CEO's identity after approval: approved specs/arc
 
 ## Delivery
 
-* **Planning** bootstraps the product repository (if missing): template files, `develop` branch, labels, `staging` and
+- **Planning** bootstraps the product repository (if missing): template files, `develop` branch, labels, `staging` and
   `production` environments (CEO as required reviewer), branch protection with required checks.
-* Work items of kind epic/story/task/bug are mirrored as GitHub issues (stories/tasks become sub-issues).
-* **Build**: `assign_to_coding_agent` assigns the issue to `copilot-swe-agent` with an `agent_assignment`
+- Work items of kind epic/story/task/bug are mirrored as GitHub issues (stories/tasks become sub-issues).
+- **Build**: `assign_to_coding_agent` assigns the issue to `copilot-swe-agent` with an `agent_assignment`
   (`base_branch: develop`, `custom_agent: backend-engineer|frontend-engineer|qa-engineer`, custom instructions,
   optional model). The **delivery monitor** (every 60 s) tracks linked PRs (draft/`[WIP]` → ready → merged), and
   resumes the engineering manager to review (`review_pull_request`, as the GitHub App bot when configured) and merge
   into `develop` when CI is green. `request_changes` reviews mention `@copilot` so the cloud agent iterates.
-* Merges to `develop` deploy to staging; the release PR into `main` deploys to production after the environment
+- Merges to `develop` deploy to staging; the release PR into `main` deploys to production after the environment
   approval — which the CEO grants inside Techgens.
 
 ## Identity
 
-* **PAT mode**: one fine-grained token owned by the CEO (Copilot Requests permission + repo permissions) powers both the
+- **PAT mode**: one fine-grained token owned by the CEO (Copilot Requests permission + repo permissions) powers both the
   Copilot SDK and GitHub calls; agent comments show the agent's name in the body.
-* **GitHub App mode** (manifest flow): user-to-server token (auto-refreshed) for the Copilot SDK, Copilot assignment and
+- **GitHub App mode** (manifest flow): user-to-server token (auto-refreshed) for the Copilot SDK, Copilot assignment and
   CEO-authorised actions; installation token so agent reviews/issues are authored by `<app>[bot]`.
 
 ## Observability

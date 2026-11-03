@@ -46,7 +46,13 @@ export class ApprovalService {
       const [prev] = await db
         .select()
         .from(schema.approvals)
-        .where(and(eq(schema.approvals.initiativeId, input.initiativeId), eq(schema.approvals.kind, input.kind), inArray(schema.approvals.status, ["changes_requested", "pending"])))
+        .where(
+          and(
+            eq(schema.approvals.initiativeId, input.initiativeId),
+            eq(schema.approvals.kind, input.kind),
+            inArray(schema.approvals.status, ["changes_requested", "pending"]),
+          ),
+        )
         .orderBy(desc(schema.approvals.createdAt))
         .limit(1);
       if (prev) {
@@ -89,7 +95,11 @@ export class ApprovalService {
     await this.app.docs.setStatus(documentIds, "in_review");
     const policy = await this.app.settings.get("gatePolicy");
     if (!isGateEnabled(policy, input.kind)) {
-      const decided = await this.decide(approval!.id, { outcome: "approved", comment: "Auto-approved: gate disabled in the CEO's gate policy." }, "system");
+      const decided = await this.decide(
+        approval!.id,
+        { outcome: "approved", comment: "Auto-approved: gate disabled in the CEO's gate policy." },
+        "system",
+      );
       return { approval: decided, autoApproved: true };
     }
     await this.app.bus.emit({
@@ -101,15 +111,26 @@ export class ApprovalService {
       summary: `${GATE_LABELS[input.kind]}: ${input.title}`,
       data: { kind: input.kind, initiativeId: input.initiativeId ?? null, round: approval!.round },
     });
-    await this.app.notifications.notify({ kind: "approval", title: `Approval needed — ${GATE_LABELS[input.kind]}`, body: input.title, link: approvalLink(approval!.id) });
+    await this.app.notifications.notify({
+      kind: "approval",
+      title: `Approval needed — ${GATE_LABELS[input.kind]}`,
+      body: input.title,
+      link: approvalLink(approval!.id),
+    });
     return { approval: approval!, autoApproved: false };
   }
 
-  async decide(id: string, input: { outcome: ApprovalOutcome; comment?: string; extraCredits?: number }, actor: "ceo" | "system" = "ceo"): Promise<Approval> {
+  async decide(
+    id: string,
+    input: { outcome: ApprovalOutcome; comment?: string; extraCredits?: number },
+    actor: "ceo" | "system" = "ceo",
+  ): Promise<Approval> {
     const approval = await this.get(id);
-    if (approval.status !== "pending") throw new DomainError(`approval is already ${approval.status}`, "conflict");
+    if (approval.status !== "pending")
+      throw new DomainError(`approval is already ${approval.status}`, "conflict");
     let comment = input.comment?.trim() ?? "";
-    if (actor === "ceo" && input.outcome !== "approved" && !comment) throw new DomainError("please explain what should change (comment required)");
+    if (actor === "ceo" && input.outcome !== "approved" && !comment)
+      throw new DomainError("please explain what should change (comment required)");
     const status: ApprovalStatus = input.outcome;
     let payload = approval.payload;
     let grantNote = "";
@@ -117,16 +138,27 @@ export class ApprovalService {
       // Approving without an amount grants the suggestion; the decision always states what was granted and until when.
       const granted = input.extraCredits ?? Number(approval.payload.suggestedExtraCredits ?? 0);
       payload = { ...payload, grantedExtraCredits: granted };
-      grantNote = await this.app.budget.describeGrant(typeof approval.payload.budgetId === "string" ? approval.payload.budgetId : null, granted);
+      grantNote = await this.app.budget.describeGrant(
+        typeof approval.payload.budgetId === "string" ? approval.payload.budgetId : null,
+        granted,
+      );
       comment = comment ? `${comment} — ${grantNote}` : grantNote;
     }
     const [updated] = await this.app.db
       .update(schema.approvals)
-      .set({ status, payload, decisionComment: comment || null, decidedAt: new Date(), updatedAt: new Date() })
+      .set({
+        status,
+        payload,
+        decisionComment: comment || null,
+        decidedAt: new Date(),
+        updatedAt: new Date(),
+      })
       .where(and(eq(schema.approvals.id, id), eq(schema.approvals.status, "pending")))
       .returning();
     if (!updated) throw new DomainError("approval was decided concurrently", "conflict");
-    await this.app.db.insert(schema.approvalDecisions).values({ approvalId: id, outcome: input.outcome, comment, actorType: actor, round: approval.round });
+    await this.app.db
+      .insert(schema.approvalDecisions)
+      .values({ approvalId: id, outcome: input.outcome, comment, actorType: actor, round: approval.round });
     if (approval.initiativeId) {
       await this.app.db.insert(schema.decisions).values({
         initiativeId: approval.initiativeId,
@@ -153,7 +185,12 @@ export class ApprovalService {
       subjectType: "approval",
       subjectId: id,
       summary: `${GATE_LABELS[approval.kind]} ${input.outcome.replace("_", " ")}: ${approval.title}${grantNote ? ` — ${grantNote}` : ""}`,
-      data: { kind: approval.kind, outcome: input.outcome, initiativeId: approval.initiativeId, ...(grantNote ? { grantedExtraCredits: payload.grantedExtraCredits } : {}) },
+      data: {
+        kind: approval.kind,
+        outcome: input.outcome,
+        initiativeId: approval.initiativeId,
+        ...(grantNote ? { grantedExtraCredits: payload.grantedExtraCredits } : {}),
+      },
     });
     await this.app.engine.onApprovalDecided(updated, input.outcome, comment, note);
     await this.app.lifecycle.onApprovalDecided(updated, input.outcome, comment);
@@ -169,7 +206,12 @@ export class ApprovalService {
     const withdrawn = await this.app.db
       .update(schema.approvals)
       .set({ status: "cancelled", decisionComment: reason, decidedAt: now, updatedAt: now })
-      .where(and(eq(schema.approvals.initiativeId, initiativeId), inArray(schema.approvals.status, ["pending", "changes_requested"])))
+      .where(
+        and(
+          eq(schema.approvals.initiativeId, initiativeId),
+          inArray(schema.approvals.status, ["pending", "changes_requested"]),
+        ),
+      )
       .returning();
     if (!withdrawn.length) return [];
     const ids = withdrawn.map((a) => a.id);
@@ -182,57 +224,102 @@ export class ApprovalService {
         subjectType: "approval",
         subjectId: a.id,
         summary: `${GATE_LABELS[a.kind]} withdrawn: ${a.title}`,
-        data: { kind: a.kind, outcome: "withdrawn", status: "cancelled", initiativeId: a.initiativeId, reason },
+        data: {
+          kind: a.kind,
+          outcome: "withdrawn",
+          status: "cancelled",
+          initiativeId: a.initiativeId,
+          reason,
+        },
       });
     }
     // Jobs outside the initiative (e.g. blocked by a shared budget) must not keep waiting on a withdrawn approval.
     const waiting = await this.app.db
       .select()
       .from(schema.jobs)
-      .where(and(eq(schema.jobs.status, "waiting"), eq(schema.jobs.waitReason, "approval"), inArray(sql<string>`${schema.jobs.waitState}->>'approvalId'`, ids)));
-    for (const job of waiting) await this.app.engine.resume(job.id, job.sessionId ? "The approval you were waiting for was withdrawn. Continue your assignment." : null);
+      .where(
+        and(
+          eq(schema.jobs.status, "waiting"),
+          eq(schema.jobs.waitReason, "approval"),
+          inArray(sql<string>`${schema.jobs.waitState}->>'approvalId'`, ids),
+        ),
+      );
+    for (const job of waiting)
+      await this.app.engine.resume(
+        job.id,
+        job.sessionId ? "The approval you were waiting for was withdrawn. Continue your assignment." : null,
+      );
     return withdrawn;
   }
 
   /** Updates the gate policy and records one CEO decision (decision log + activity feed) per gate switched on or off. */
   async updateGatePolicy(patch: Record<string, boolean>): Promise<void> {
     const before = await this.app.settings.get("gatePolicy");
-    const known = Object.entries(patch).filter((e): e is [ApprovalKind, boolean] => isOneOf(APPROVAL_KINDS, e[0]));
+    const known = Object.entries(patch).filter((e): e is [ApprovalKind, boolean] =>
+      isOneOf(APPROVAL_KINDS, e[0]),
+    );
     await this.app.settings.set("gatePolicy", { ...before, ...Object.fromEntries(known) });
     for (const [kind, enabled] of known) {
       if (isGateEnabled(before, kind) === enabled) continue;
       const label = GATE_LABELS[kind];
       const summary = `CEO turned ${enabled ? "on" : "off"} the ${label} gate`;
-      const details = enabled ? `${label} requests need the CEO's approval again.` : `${label} requests are now approved automatically; each auto-approval is logged.`;
-      const [row] = await this.app.db.insert(schema.decisions).values({ initiativeId: null, type: "change", summary, details, actorType: "ceo" }).returning();
-      await this.app.bus.emit({ type: "decision.recorded", actorType: "ceo", subjectType: "settings", subjectId: "gatePolicy", summary, data: { decisionId: row!.id, type: "change", gate: kind, enabled } });
+      const details = enabled
+        ? `${label} requests need the CEO's approval again.`
+        : `${label} requests are now approved automatically; each auto-approval is logged.`;
+      const [row] = await this.app.db
+        .insert(schema.decisions)
+        .values({ initiativeId: null, type: "change", summary, details, actorType: "ceo" })
+        .returning();
+      await this.app.bus.emit({
+        type: "decision.recorded",
+        actorType: "ceo",
+        subjectType: "settings",
+        subjectId: "gatePolicy",
+        summary,
+        data: { decisionId: row!.id, type: "change", gate: kind, enabled },
+      });
     }
   }
 
   /** Executes CEO-authorised actions. Returns a note for the waiting agent. */
-  private async applySideEffects(a: Approval, input: { outcome: ApprovalOutcome; extraCredits?: number }): Promise<string> {
+  private async applySideEffects(
+    a: Approval,
+    input: { outcome: ApprovalOutcome; extraCredits?: number },
+  ): Promise<string> {
     const approved = input.outcome === "approved";
     switch (a.kind) {
       case "budget_overrun": {
         // Blocked jobs wait on this approval; JobEngine.onApprovalDecided resumes or fails them.
         if (!approved) return "";
-        const extra = Number(a.payload.grantedExtraCredits ?? input.extraCredits ?? a.payload.suggestedExtraCredits ?? 0);
-        if (a.payload.budgetId && extra > 0) await this.app.budget.grantExtra(String(a.payload.budgetId), extra);
+        const extra = Number(
+          a.payload.grantedExtraCredits ?? input.extraCredits ?? a.payload.suggestedExtraCredits ?? 0,
+        );
+        if (a.payload.budgetId && extra > 0)
+          await this.app.budget.grantExtra(String(a.payload.budgetId), extra);
         return a.decisionComment ?? `Budget extended by ${extra} credits.`;
       }
       case "merge_to_main":
         return approved ? this.app.delivery.mergeRelease(a) : "";
       case "prod_deploy":
-        return approved ? this.app.delivery.approveProductionDeployment(a) : this.app.delivery.rejectProductionDeployment(a);
+        return approved
+          ? this.app.delivery.approveProductionDeployment(a)
+          : this.app.delivery.rejectProductionDeployment(a);
       case "hire":
         if (approved && typeof a.payload.roleId === "string") {
-          const agent = await this.app.org.hire(a.payload.roleId, typeof a.payload.name === "string" ? a.payload.name : undefined);
+          const agent = await this.app.org.hire(
+            a.payload.roleId,
+            typeof a.payload.name === "string" ? a.payload.name : undefined,
+          );
           return `Hired ${agent.name}.`;
         }
         return "";
       case "spec":
       case "architecture":
-        return approved ? this.app.github.publishDocuments(a).catch((err) => `Documents not published to the repository: ${(err as Error).message}`) : "";
+        return approved
+          ? this.app.github
+              .publishDocuments(a)
+              .catch((err) => `Documents not published to the repository: ${(err as Error).message}`)
+          : "";
       default:
         return "";
     }
@@ -249,10 +336,22 @@ export class ApprovalService {
 
   async summaries(rows: Approval[]): Promise<ApprovalSummaryDTO[]> {
     const iniIds = [...new Set(rows.map((r) => r.initiativeId).filter((x): x is string => Boolean(x)))];
-    const agentIds = [...new Set(rows.map((r) => r.requestedByAgentId).filter((x): x is string => Boolean(x)))];
+    const agentIds = [
+      ...new Set(rows.map((r) => r.requestedByAgentId).filter((x): x is string => Boolean(x))),
+    ];
     const [inis, agents] = await Promise.all([
-      iniIds.length ? this.app.db.select({ id: schema.initiatives.id, title: schema.initiatives.title }).from(schema.initiatives).where(inArray(schema.initiatives.id, iniIds)) : [],
-      agentIds.length ? this.app.db.select({ id: schema.agents.id, name: schema.agents.name }).from(schema.agents).where(inArray(schema.agents.id, agentIds)) : [],
+      iniIds.length
+        ? this.app.db
+            .select({ id: schema.initiatives.id, title: schema.initiatives.title })
+            .from(schema.initiatives)
+            .where(inArray(schema.initiatives.id, iniIds))
+        : [],
+      agentIds.length
+        ? this.app.db
+            .select({ id: schema.agents.id, name: schema.agents.name })
+            .from(schema.agents)
+            .where(inArray(schema.agents.id, agentIds))
+        : [],
     ]);
     const ini = new Map(inis.map((i) => [i.id, i.title]));
     const ag = new Map(agents.map((a) => [a.id, a.name]));
@@ -264,7 +363,11 @@ export class ApprovalService {
       summary: a.summary,
       initiativeId: a.initiativeId,
       initiativeTitle: a.initiativeId ? (ini.get(a.initiativeId) ?? null) : null,
-      requestedBy: a.requestedByAgentId ? (ag.get(a.requestedByAgentId) ?? null) : a.kind === "budget_overrun" ? "Budget guard" : null,
+      requestedBy: a.requestedByAgentId
+        ? (ag.get(a.requestedByAgentId) ?? null)
+        : a.kind === "budget_overrun"
+          ? "Budget guard"
+          : null,
       round: a.round,
       createdAt: a.createdAt.toISOString(),
       decidedAt: a.decidedAt?.toISOString() ?? null,
@@ -285,7 +388,12 @@ export class ApprovalService {
       ...summary!,
       payload: a.payload,
       documents: documents.filter((d): d is NonNullable<typeof d> => d !== null),
-      decisions: decisions.map((d) => ({ outcome: d.outcome, comment: d.comment, round: d.round, createdAt: d.createdAt.toISOString() })),
+      decisions: decisions.map((d) => ({
+        outcome: d.outcome,
+        comment: d.comment,
+        round: d.round,
+        createdAt: d.createdAt.toISOString(),
+      })),
     };
   }
 

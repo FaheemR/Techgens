@@ -37,12 +37,19 @@ export class NotificationService {
   }
 
   async list(limit = 50): Promise<NotificationDTO[]> {
-    const rows = await this.app.db.select().from(schema.notifications).orderBy(desc(schema.notifications.createdAt)).limit(limit);
+    const rows = await this.app.db
+      .select()
+      .from(schema.notifications)
+      .orderBy(desc(schema.notifications.createdAt))
+      .limit(limit);
     return rows.map(notificationDTO);
   }
 
   async markRead(id: string): Promise<void> {
-    await this.app.db.update(schema.notifications).set({ readAt: new Date() }).where(eq(schema.notifications.id, id));
+    await this.app.db
+      .update(schema.notifications)
+      .set({ readAt: new Date() })
+      .where(eq(schema.notifications.id, id));
   }
 
   /** Marks the "approval needed" notifications of approvals that left `pending` as read. Returns how many changed. */
@@ -51,12 +58,21 @@ export class NotificationService {
     const rows = await this.app.db
       .update(schema.notifications)
       .set({ readAt: new Date() })
-      .where(and(isNull(schema.notifications.readAt), eq(schema.notifications.kind, "approval"), inArray(schema.notifications.link, approvalIds.map(approvalLink))))
+      .where(
+        and(
+          isNull(schema.notifications.readAt),
+          eq(schema.notifications.kind, "approval"),
+          inArray(schema.notifications.link, approvalIds.map(approvalLink)),
+        ),
+      )
       .returning({ id: schema.notifications.id });
     return rows.length;
   }
 
   async markAllRead(): Promise<void> {
-    await this.app.db.update(schema.notifications).set({ readAt: new Date() }).where(isNull(schema.notifications.readAt));
+    await this.app.db
+      .update(schema.notifications)
+      .set({ readAt: new Date() })
+      .where(isNull(schema.notifications.readAt));
   }
 }

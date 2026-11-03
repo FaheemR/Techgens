@@ -28,8 +28,19 @@ export interface SystemInfo {
   version: string;
   paused: boolean;
   demoMode: boolean;
-  runtime: { kind: "copilot" | "fake"; ready: boolean; authenticated: boolean; login?: string; message?: string };
-  github: { connected: boolean; login: string | null; mode: "pat" | "app" | "demo" | null; appSlug: string | null };
+  runtime: {
+    kind: "copilot" | "fake";
+    ready: boolean;
+    authenticated: boolean;
+    login?: string;
+    message?: string;
+  };
+  github: {
+    connected: boolean;
+    login: string | null;
+    mode: "pat" | "app" | "demo" | null;
+    appSlug: string | null;
+  };
   onboarded: boolean;
 }
 
@@ -444,7 +455,13 @@ export interface SettingsDTO {
   autoMergeToIntegration: boolean;
   /** CEO-configured MCP servers (roles opt in with `mcp: [key]`); env values are never returned. */
   mcpServers: Record<string, { command: string; args: string[]; tools: string[] }>;
-  github: { connected: boolean; login: string | null; mode: "pat" | "app" | "demo" | null; appSlug: string | null; owner: string | null };
+  github: {
+    connected: boolean;
+    login: string | null;
+    mode: "pat" | "app" | "demo" | null;
+    appSlug: string | null;
+    owner: string | null;
+  };
 }
 
 export interface ModelOptionDTO {

@@ -24,7 +24,12 @@ export interface BudgetEvaluation {
 export function evaluateBudget(spentNanoAiu: number, limitCredits: number, warnPct = 80): BudgetEvaluation {
   const spentCredits = nanoToCredits(spentNanoAiu);
   if (limitCredits <= 0) {
-    return { state: spentCredits > 0 ? "exceeded" : "ok", spentCredits, limitCredits, ratio: spentCredits > 0 ? Infinity : 0 };
+    return {
+      state: spentCredits > 0 ? "exceeded" : "ok",
+      spentCredits,
+      limitCredits,
+      ratio: spentCredits > 0 ? Infinity : 0,
+    };
   }
   const ratio = spentCredits / limitCredits;
   const state: BudgetState = ratio >= 1 ? "exceeded" : ratio * 100 >= warnPct ? "warn" : "ok";

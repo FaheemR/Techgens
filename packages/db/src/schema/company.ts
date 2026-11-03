@@ -155,7 +155,9 @@ export const agents = pgTable(
       .notNull()
       .references(() => roles.id),
     name: text("name").notNull(),
-    managerAgentId: uuid("manager_agent_id").references((): AnyPgColumn => agents.id, { onDelete: "set null" }),
+    managerAgentId: uuid("manager_agent_id").references((): AnyPgColumn => agents.id, {
+      onDelete: "set null",
+    }),
     status: text("status").$type<AgentStatus>().notNull().default("active"),
     modelOverride: text("model_override"),
     dailyCreditsOverride: doublePrecision("daily_credits_override"),

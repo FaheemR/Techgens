@@ -83,13 +83,34 @@ export interface CodingAssignment {
 export interface GitHubPort {
   getViewer(): Promise<{ login: string; id: number; name: string | null }>;
   getRepository(repo: RepoRef): Promise<RepoInfo | null>;
-  createRepository(input: { owner: string; name: string; description?: string; private: boolean; ownerIsOrg: boolean }): Promise<RepoInfo>;
+  createRepository(input: {
+    owner: string;
+    name: string;
+    description?: string;
+    private: boolean;
+    ownerIsOrg: boolean;
+  }): Promise<RepoInfo>;
   /** Commits files to a branch in a single commit (creates the branch from `baseBranch` if needed). */
-  commitFiles(repo: RepoRef, input: { branch: string; baseBranch?: string; message: string; files: Array<{ path: string; content: string }> }): Promise<{ sha: string }>;
+  commitFiles(
+    repo: RepoRef,
+    input: {
+      branch: string;
+      baseBranch?: string;
+      message: string;
+      files: Array<{ path: string; content: string }>;
+    },
+  ): Promise<{ sha: string }>;
   createBranch(repo: RepoRef, branch: string, fromBranch: string): Promise<void>;
-  ensureLabels(repo: RepoRef, labels: Array<{ name: string; color: string; description?: string }>): Promise<void>;
+  ensureLabels(
+    repo: RepoRef,
+    labels: Array<{ name: string; color: string; description?: string }>,
+  ): Promise<void>;
   createIssue(repo: RepoRef, input: { title: string; body: string; labels?: string[] }): Promise<IssueInfo>;
-  updateIssue(repo: RepoRef, issueNumber: number, input: { title?: string; body?: string; state?: "open" | "closed" }): Promise<void>;
+  updateIssue(
+    repo: RepoRef,
+    issueNumber: number,
+    input: { title?: string; body?: string; state?: "open" | "closed" },
+  ): Promise<void>;
   addSubIssue(repo: RepoRef, parentNumber: number, childIssueId: number): Promise<void>;
   /** Assigns the issue to Copilot cloud agent (copilot-swe-agent) with an agent assignment. */
   assignToCopilot(repo: RepoRef, issueNumber: number, assignment: CodingAssignment): Promise<void>;
@@ -99,17 +120,47 @@ export interface GitHubPort {
   getPullRequest(repo: RepoRef, prNumber: number): Promise<PullRequestInfo>;
   getPullRequestDiff(repo: RepoRef, prNumber: number): Promise<string>;
   findOpenPullRequest(repo: RepoRef, head: string, base: string): Promise<PullRequestInfo | null>;
-  createPullRequest(repo: RepoRef, input: { head: string; base: string; title: string; body: string; draft?: boolean }): Promise<PullRequestInfo>;
+  createPullRequest(
+    repo: RepoRef,
+    input: { head: string; base: string; title: string; body: string; draft?: boolean },
+  ): Promise<PullRequestInfo>;
   updatePullRequest(repo: RepoRef, prNumber: number, input: { title?: string; body?: string }): Promise<void>;
   markReadyForReview(repo: RepoRef, prNumber: number): Promise<void>;
-  createReview(repo: RepoRef, prNumber: number, input: { event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT"; body: string; comments?: Array<{ path: string; line: number; body: string }> }): Promise<void>;
+  createReview(
+    repo: RepoRef,
+    prNumber: number,
+    input: {
+      event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+      body: string;
+      comments?: Array<{ path: string; line: number; body: string }>;
+    },
+  ): Promise<void>;
   createIssueComment(repo: RepoRef, issueNumber: number, body: string): Promise<void>;
-  mergePullRequest(repo: RepoRef, prNumber: number, method: "squash" | "merge" | "rebase"): Promise<{ merged: boolean; sha: string | null; message: string }>;
+  mergePullRequest(
+    repo: RepoRef,
+    prNumber: number,
+    method: "squash" | "merge" | "rebase",
+  ): Promise<{ merged: boolean; sha: string | null; message: string }>;
   getCheckStatus(repo: RepoRef, ref: string): Promise<CheckStatus>;
-  listWorkflowRuns(repo: RepoRef, input?: { branch?: string; status?: string; perPage?: number }): Promise<WorkflowRunInfo[]>;
+  listWorkflowRuns(
+    repo: RepoRef,
+    input?: { branch?: string; status?: string; perPage?: number },
+  ): Promise<WorkflowRunInfo[]>;
   getPendingDeployments(repo: RepoRef, runId: number): Promise<PendingDeploymentInfo[]>;
-  reviewPendingDeployments(repo: RepoRef, runId: number, input: { environmentIds: number[]; state: "approved" | "rejected"; comment: string }): Promise<void>;
-  ensureEnvironment(repo: RepoRef, name: string, input: { reviewerUserIds?: number[]; branches?: string[] }): Promise<void>;
+  reviewPendingDeployments(
+    repo: RepoRef,
+    runId: number,
+    input: { environmentIds: number[]; state: "approved" | "rejected"; comment: string },
+  ): Promise<void>;
+  ensureEnvironment(
+    repo: RepoRef,
+    name: string,
+    input: { reviewerUserIds?: number[]; branches?: string[] },
+  ): Promise<void>;
   setEnvironmentVariable(repo: RepoRef, environment: string, name: string, value: string): Promise<void>;
-  protectBranch(repo: RepoRef, branch: string, input: { requiredChecks: string[]; requireReviews: boolean }): Promise<void>;
+  protectBranch(
+    repo: RepoRef,
+    branch: string,
+    input: { requiredChecks: string[]; requireReviews: boolean },
+  ): Promise<void>;
 }

@@ -32,10 +32,17 @@ const l = schema.usageLedger;
 
 /** Credits for people: "10", "0.5", "0.0035". */
 export function fmtCredits(credits: number): string {
-  return Math.abs(credits) >= 0.01 || credits === 0 ? String(Number(credits.toFixed(2))) : credits.toPrecision(2);
+  return Math.abs(credits) >= 0.01 || credits === 0
+    ? String(Number(credits.toFixed(2)))
+    : credits.toPrecision(2);
 }
 
-const WINDOW_NAMES: Record<BudgetPeriod, string> = { day: "today", week: "this week", month: "this month", total: "the total budget" };
+const WINDOW_NAMES: Record<BudgetPeriod, string> = {
+  day: "today",
+  week: "this week",
+  month: "this month",
+  total: "the total budget",
+};
 
 /** "for today (until 2026-11-04 00:00 UTC)" / "on top of the total budget": how long a grant on a budget lasts. */
 export function grantWindow(period: BudgetPeriod, windowEndsAt: Date | string | null): string {
@@ -47,12 +54,20 @@ export class BudgetService {
   constructor(private readonly app: Techgens) {}
 
   async ensureAgentBudget(agentId: string, dailyCredits: number, overwrite = false): Promise<void> {
-    const values = { scope: "agent" as const, scopeId: agentId, period: "day" as const, limitCredits: dailyCredits };
+    const values = {
+      scope: "agent" as const,
+      scopeId: agentId,
+      period: "day" as const,
+      limitCredits: dailyCredits,
+    };
     if (overwrite) {
       await this.app.db
         .insert(schema.budgets)
         .values(values)
-        .onConflictDoUpdate({ target: [schema.budgets.scope, schema.budgets.scopeId, schema.budgets.period], set: { limitCredits: dailyCredits, updatedAt: new Date() } });
+        .onConflictDoUpdate({
+          target: [schema.budgets.scope, schema.budgets.scopeId, schema.budgets.period],
+          set: { limitCredits: dailyCredits, updatedAt: new Date() },
+        });
     } else {
       await this.app.db.insert(schema.budgets).values(values).onConflictDoNothing();
     }
@@ -123,7 +138,9 @@ export class BudgetService {
       id: b.id,
       scope: b.scope,
       scopeId: b.scopeId,
-      scopeLabel: labels?.get(`${b.scope}:${b.scopeId}`) ?? (b.scope === "company" ? "Company" : (b.scopeId ?? b.scope)),
+      scopeLabel:
+        labels?.get(`${b.scope}:${b.scopeId}`) ??
+        (b.scope === "company" ? "Company" : (b.scopeId ?? b.scope)),
       period: b.period,
       limitCredits: b.limitCredits,
       grantedCredits: granted,
@@ -144,20 +161,33 @@ export class BudgetService {
 
   /** Decision note for a grant on `budgetId`, e.g. "Granted 10 extra credits for today (until 2026-11-04 00:00 UTC)." */
   async describeGrant(budgetId: string | null, credits: number, now: Date = new Date()): Promise<string> {
-    const [b] = budgetId ? await this.app.db.select().from(schema.budgets).where(eq(schema.budgets.id, budgetId)) : [];
+    const [b] = budgetId
+      ? await this.app.db.select().from(schema.budgets).where(eq(schema.budgets.id, budgetId))
+      : [];
     const amount = `${fmtCredits(credits)} extra credit${credits === 1 ? "" : "s"}`;
     return b ? `Granted ${amount} ${grantWindow(b.period, periodEnd(b.period, now))}.` : `Granted ${amount}.`;
   }
 
   /** Budgets that constrain a job of `agent` (company, department, agent, initiative, product). */
   private async applicable(agent: Agent, role: Role, job: Pick<Job, "initiativeId">): Promise<Budget[]> {
-    const conds: SQL[] = [eq(schema.budgets.scope, "company"), and(eq(schema.budgets.scope, "department"), eq(schema.budgets.scopeId, role.department))!, and(eq(schema.budgets.scope, "agent"), eq(schema.budgets.scopeId, agent.id))!];
+    const conds: SQL[] = [
+      eq(schema.budgets.scope, "company"),
+      and(eq(schema.budgets.scope, "department"), eq(schema.budgets.scopeId, role.department))!,
+      and(eq(schema.budgets.scope, "agent"), eq(schema.budgets.scopeId, agent.id))!,
+    ];
     if (job.initiativeId) {
       conds.push(and(eq(schema.budgets.scope, "initiative"), eq(schema.budgets.scopeId, job.initiativeId))!);
-      const [ini] = await this.app.db.select({ productId: schema.initiatives.productId }).from(schema.initiatives).where(eq(schema.initiatives.id, job.initiativeId));
-      if (ini?.productId) conds.push(and(eq(schema.budgets.scope, "product"), eq(schema.budgets.scopeId, ini.productId))!);
+      const [ini] = await this.app.db
+        .select({ productId: schema.initiatives.productId })
+        .from(schema.initiatives)
+        .where(eq(schema.initiatives.id, job.initiativeId));
+      if (ini?.productId)
+        conds.push(and(eq(schema.budgets.scope, "product"), eq(schema.budgets.scopeId, ini.productId))!);
     }
-    return this.app.db.select().from(schema.budgets).where(and(eq(schema.budgets.enabled, true), or(...conds)));
+    return this.app.db
+      .select()
+      .from(schema.budgets)
+      .where(and(eq(schema.budgets.enabled, true), or(...conds)));
   }
 
   /** Returns the first exceeded budget (if any). Emits one warning per budget window when crossing the threshold. */
@@ -172,7 +202,13 @@ export class BudgetService {
           .onConflictDoNothing()
           .returning();
         if (inserted.length) {
-          await this.app.bus.emit({ type: "budget.warning", subjectType: "budget", subjectId: b.id, summary: `${b.scope} budget at ${Math.round((dto.spentCredits / (dto.limitCredits + dto.grantedCredits)) * 100)}% (${b.period})`, data: { ...dto } });
+          await this.app.bus.emit({
+            type: "budget.warning",
+            subjectType: "budget",
+            subjectId: b.id,
+            summary: `${b.scope} budget at ${Math.round((dto.spentCredits / (dto.limitCredits + dto.grantedCredits)) * 100)}% (${b.period})`,
+            data: { ...dto },
+          });
         }
       }
     }
@@ -203,14 +239,22 @@ export class BudgetService {
   }
 
   async agentDailyLimits(): Promise<Map<string, number>> {
-    const rows = await this.app.db.select().from(schema.budgets).where(and(eq(schema.budgets.scope, "agent"), eq(schema.budgets.period, "day")));
+    const rows = await this.app.db
+      .select()
+      .from(schema.budgets)
+      .where(and(eq(schema.budgets.scope, "agent"), eq(schema.budgets.period, "day")));
     return new Map(rows.map((r) => [r.scopeId!, r.limitCredits]));
   }
 
   private async labels(): Promise<Map<string, string>> {
     const [agents, initiatives, products] = await Promise.all([
-      this.app.db.select({ id: schema.agents.id, name: schema.agents.name, role: schema.roles.title }).from(schema.agents).innerJoin(schema.roles, eq(schema.agents.roleId, schema.roles.id)),
-      this.app.db.select({ id: schema.initiatives.id, title: schema.initiatives.title }).from(schema.initiatives),
+      this.app.db
+        .select({ id: schema.agents.id, name: schema.agents.name, role: schema.roles.title })
+        .from(schema.agents)
+        .innerJoin(schema.roles, eq(schema.agents.roleId, schema.roles.id)),
+      this.app.db
+        .select({ id: schema.initiatives.id, title: schema.initiatives.title })
+        .from(schema.initiatives),
       this.app.db.select({ id: schema.products.id, name: schema.products.name }).from(schema.products),
     ]);
     const m = new Map<string, string>();
@@ -221,19 +265,51 @@ export class BudgetService {
   }
 
   async listBudgets(): Promise<BudgetDTO[]> {
-    const rows = await this.app.db.select().from(schema.budgets).orderBy(schema.budgets.scope, schema.budgets.createdAt);
+    const rows = await this.app.db
+      .select()
+      .from(schema.budgets)
+      .orderBy(schema.budgets.scope, schema.budgets.createdAt);
     const labels = await this.labels();
-    for (const r of rows) if (r.scope === "department") labels.set(`department:${r.scopeId}`, r.scopeId ?? "");
+    for (const r of rows)
+      if (r.scope === "department") labels.set(`department:${r.scopeId}`, r.scopeId ?? "");
     return Promise.all(rows.map((b) => this.evaluate(b, labels)));
   }
 
-  async upsertBudgets(items: Array<{ scope: BudgetScope; scopeId: string | null; period: BudgetPeriod; limitCredits: number; warnPct?: number; enabled?: boolean }>): Promise<BudgetDTO[]> {
+  async upsertBudgets(
+    items: Array<{
+      scope: BudgetScope;
+      scopeId: string | null;
+      period: BudgetPeriod;
+      limitCredits: number;
+      warnPct?: number;
+      enabled?: boolean;
+    }>,
+  ): Promise<BudgetDTO[]> {
     for (const i of items) {
-      const values = { scope: i.scope, scopeId: i.scope === "company" ? null : i.scopeId, period: i.period, limitCredits: i.limitCredits, warnPct: i.warnPct ?? 80, enabled: i.enabled ?? true };
+      const values = {
+        scope: i.scope,
+        scopeId: i.scope === "company" ? null : i.scopeId,
+        period: i.period,
+        limitCredits: i.limitCredits,
+        warnPct: i.warnPct ?? 80,
+        enabled: i.enabled ?? true,
+      };
       if (values.scopeId === null) {
-        const [existing] = await this.app.db.select().from(schema.budgets).where(and(eq(schema.budgets.scope, i.scope), sql`${schema.budgets.scopeId} is null`, eq(schema.budgets.period, i.period)));
+        const [existing] = await this.app.db
+          .select()
+          .from(schema.budgets)
+          .where(
+            and(
+              eq(schema.budgets.scope, i.scope),
+              sql`${schema.budgets.scopeId} is null`,
+              eq(schema.budgets.period, i.period),
+            ),
+          );
         if (existing) {
-          await this.app.db.update(schema.budgets).set({ ...values, updatedAt: new Date() }).where(eq(schema.budgets.id, existing.id));
+          await this.app.db
+            .update(schema.budgets)
+            .set({ ...values, updatedAt: new Date() })
+            .where(eq(schema.budgets.id, existing.id));
           continue;
         }
         await this.app.db.insert(schema.budgets).values(values);
@@ -242,7 +318,10 @@ export class BudgetService {
       await this.app.db
         .insert(schema.budgets)
         .values(values)
-        .onConflictDoUpdate({ target: [schema.budgets.scope, schema.budgets.scopeId, schema.budgets.period], set: { ...values, updatedAt: new Date() } });
+        .onConflictDoUpdate({
+          target: [schema.budgets.scope, schema.budgets.scopeId, schema.budgets.period],
+          set: { ...values, updatedAt: new Date() },
+        });
     }
     return this.listBudgets();
   }
@@ -256,20 +335,61 @@ export class BudgetService {
     const sum = async (since: Date) => nanoToCredits(await this.spentNano("company", null, since));
     const since = new Date(Date.now() - days * 86_400_000);
     const [byAgent, byDept, byIni, daily, prem] = await Promise.all([
-      db.select({ agentId: l.agentId, name: schema.agents.name, total: sql<string>`sum(${l.nanoAiu})` }).from(l).leftJoin(schema.agents, eq(l.agentId, schema.agents.id)).where(gte(l.createdAt, periodStart("month"))).groupBy(l.agentId, schema.agents.name),
-      db.select({ department: l.department, total: sql<string>`sum(${l.nanoAiu})` }).from(l).where(gte(l.createdAt, periodStart("month"))).groupBy(l.department),
-      db.select({ id: l.initiativeId, title: schema.initiatives.title, total: sql<string>`sum(${l.nanoAiu})` }).from(l).leftJoin(schema.initiatives, eq(l.initiativeId, schema.initiatives.id)).where(gte(l.createdAt, periodStart("month"))).groupBy(l.initiativeId, schema.initiatives.title),
-      db.select({ day: sql<string>`to_char(date_trunc('day', ${l.createdAt}), 'YYYY-MM-DD')`, total: sql<string>`sum(${l.nanoAiu})` }).from(l).where(gte(l.createdAt, since)).groupBy(sql`1`).orderBy(sql`1`),
-      db.select({ total: sql<string>`coalesce(sum(${l.premiumRequests}), 0)` }).from(l).where(gte(l.createdAt, periodStart("month"))),
+      db
+        .select({ agentId: l.agentId, name: schema.agents.name, total: sql<string>`sum(${l.nanoAiu})` })
+        .from(l)
+        .leftJoin(schema.agents, eq(l.agentId, schema.agents.id))
+        .where(gte(l.createdAt, periodStart("month")))
+        .groupBy(l.agentId, schema.agents.name),
+      db
+        .select({ department: l.department, total: sql<string>`sum(${l.nanoAiu})` })
+        .from(l)
+        .where(gte(l.createdAt, periodStart("month")))
+        .groupBy(l.department),
+      db
+        .select({
+          id: l.initiativeId,
+          title: schema.initiatives.title,
+          total: sql<string>`sum(${l.nanoAiu})`,
+        })
+        .from(l)
+        .leftJoin(schema.initiatives, eq(l.initiativeId, schema.initiatives.id))
+        .where(gte(l.createdAt, periodStart("month")))
+        .groupBy(l.initiativeId, schema.initiatives.title),
+      db
+        .select({
+          day: sql<string>`to_char(date_trunc('day', ${l.createdAt}), 'YYYY-MM-DD')`,
+          total: sql<string>`sum(${l.nanoAiu})`,
+        })
+        .from(l)
+        .where(gte(l.createdAt, since))
+        .groupBy(sql`1`)
+        .orderBy(sql`1`),
+      db
+        .select({ total: sql<string>`coalesce(sum(${l.premiumRequests}), 0)` })
+        .from(l)
+        .where(gte(l.createdAt, periodStart("month"))),
     ]);
     return {
       todayCredits: await sum(periodStart("day")),
       weekCredits: await sum(periodStart("week")),
       monthCredits: await sum(periodStart("month")),
       premiumRequestsMonth: Number(prem[0]?.total ?? 0),
-      byAgent: byAgent.filter((r) => r.agentId).map((r) => ({ agentId: r.agentId!, agentName: r.name ?? "unknown", credits: nanoToCredits(Number(r.total)) })).sort((a, b) => b.credits - a.credits),
-      byDepartment: byDept.map((r) => ({ department: r.department ?? "unknown", credits: nanoToCredits(Number(r.total)) })).sort((a, b) => b.credits - a.credits),
-      byInitiative: byIni.filter((r) => r.id).map((r) => ({ initiativeId: r.id!, title: r.title ?? "", credits: nanoToCredits(Number(r.total)) })).sort((a, b) => b.credits - a.credits),
+      byAgent: byAgent
+        .filter((r) => r.agentId)
+        .map((r) => ({
+          agentId: r.agentId!,
+          agentName: r.name ?? "unknown",
+          credits: nanoToCredits(Number(r.total)),
+        }))
+        .sort((a, b) => b.credits - a.credits),
+      byDepartment: byDept
+        .map((r) => ({ department: r.department ?? "unknown", credits: nanoToCredits(Number(r.total)) }))
+        .sort((a, b) => b.credits - a.credits),
+      byInitiative: byIni
+        .filter((r) => r.id)
+        .map((r) => ({ initiativeId: r.id!, title: r.title ?? "", credits: nanoToCredits(Number(r.total)) }))
+        .sort((a, b) => b.credits - a.credits),
       daily: daily.map((r) => ({ day: r.day, credits: nanoToCredits(Number(r.total)) })),
       budgets: await this.listBudgets(),
     };
@@ -277,7 +397,11 @@ export class BudgetService {
 
   async initiativeSpend(initiativeIds: string[]): Promise<Map<string, number>> {
     if (!initiativeIds.length) return new Map();
-    const rows = await this.app.db.select({ id: l.initiativeId, total: sql<string>`sum(${l.nanoAiu})` }).from(l).where(inArray(l.initiativeId, initiativeIds)).groupBy(l.initiativeId);
+    const rows = await this.app.db
+      .select({ id: l.initiativeId, total: sql<string>`sum(${l.nanoAiu})` })
+      .from(l)
+      .where(inArray(l.initiativeId, initiativeIds))
+      .groupBy(l.initiativeId);
     return new Map(rows.map((r) => [r.id!, nanoToCredits(Number(r.total))]));
   }
 

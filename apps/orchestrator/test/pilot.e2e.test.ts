@@ -11,7 +11,12 @@ async function pendingKinds(app: Techgens): Promise<ApprovalKind[]> {
   return (await app.approvals.list("pending")).map((a) => a.kind).sort();
 }
 
-async function decide(app: Techgens, kind: ApprovalKind, outcome: "approved" | "changes_requested" = "approved", comment = "Looks good") {
+async function decide(
+  app: Techgens,
+  kind: ApprovalKind,
+  outcome: "approved" | "changes_requested" = "approved",
+  comment = "Looks good",
+) {
   const [a] = (await app.approvals.list("pending")).filter((x) => x.kind === kind);
   expect(a, `pending ${kind} approval`).toBeDefined();
   await app.approvals.decide(a!.id, { outcome, comment });
@@ -33,14 +38,22 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
   it("runs the full product lifecycle with every CEO gate", async () => {
     const gh = app.github.memory!;
     const thread = await app.chat.createThread();
-    await app.chat.postCeoMessage(thread.id, "Build InvoiceLite: an invoicing SaaS for freelancers. MVP in 6 weeks with a budget of 400 credits.");
+    await app.chat.postCeoMessage(
+      thread.id,
+      "Build InvoiceLite: an invoicing SaaS for freelancers. MVP in 6 weeks with a budget of 400 credits.",
+    );
     await app.engine.runUntilIdle();
 
     const messages = await app.chat.messages(thread.id);
     expect(messages.map((m) => m.authorType)).toEqual(["ceo", "agent"]);
     expect(messages[1]!.content).toMatch(/InvoiceLite MVP/);
     const [ini] = await app.lifecycle.list();
-    expect(ini).toMatchObject({ title: "InvoiceLite MVP", status: "active", stage: "intake", budgetCredits: 400 });
+    expect(ini).toMatchObject({
+      title: "InvoiceLite MVP",
+      status: "active",
+      stage: "intake",
+      budgetCredits: 400,
+    });
     expect(await pendingKinds(app)).toEqual(["vision_roadmap"]);
 
     // CEO requests changes once: the Chief of Staff revises and resubmits (round 2).
@@ -82,13 +95,19 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
     await app.engine.runUntilIdle();
     const prs = [...repo.prs.values()];
     expect(prs.filter((p) => p.merged && p.baseRef === "develop")).toHaveLength(3);
-    expect(prs.filter((p) => p.baseRef === "develop").every((p) => p.reviews.some((r) => r.state === "APPROVED"))).toBe(true);
+    expect(
+      prs.filter((p) => p.baseRef === "develop").every((p) => p.reviews.some((r) => r.state === "APPROVED")),
+    ).toBe(true);
     const [epic] = await app.work.list({ initiativeId: ini!.id, kind: "epic" });
     expect(epic?.status).toBe("done");
     expect(issues.find((i) => i.labels.includes("epic"))!.state).toBe("closed");
-    const codingTasks = (await app.work.list({ initiativeId: ini!.id, kind: "task" })).filter((t) => t.forCodingAgent);
+    const codingTasks = (await app.work.list({ initiativeId: ini!.id, kind: "task" })).filter(
+      (t) => t.forCodingAgent,
+    );
     expect(codingTasks).toHaveLength(3);
-    expect(codingTasks.every((t) => t.status === "done" && t.codingStatus === "merged" && t.prUrl)).toBe(true);
+    expect(codingTasks.every((t) => t.status === "done" && t.codingStatus === "merged" && t.prUrl)).toBe(
+      true,
+    );
 
     // Verification → release: CEO approves the merge to main; Techgens merges with the CEO's identity.
     expect(await pendingKinds(app)).toEqual(["merge_to_main"]);
@@ -128,24 +147,56 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
       runUrl: `https://github.com/acme/invoicelite/actions/runs/${prodRun.id}`,
       commitSha: prodRun.sha,
       stagingVerified: true,
-      stagingEvidence: expect.stringMatching(/^deploy-staging run \d+ succeeded on [0-9a-f]{7}; QA verification: "InvoiceLite MVP — Test plan/),
+      stagingEvidence: expect.stringMatching(
+        /^deploy-staging run \d+ succeeded on [0-9a-f]{7}; QA verification: "InvoiceLite MVP — Test plan/,
+      ),
       rollback: expect.stringMatching(/previous Container Apps revision/),
       changes: mergeGate.payload.changes,
       releasePrNumber: release!.number,
       releasePrUrl: release!.url,
     });
     await decide(app, "prod_deploy");
-    expect(repo.runs.find((r) => r.id === prodRun.id)).toMatchObject({ status: "completed", conclusion: "success" });
+    expect(repo.runs.find((r) => r.id === prodRun.id)).toMatchObject({
+      status: "completed",
+      conclusion: "success",
+    });
 
     const done = await app.lifecycle.detail(ini!.id);
     expect(done.status).toBe("completed");
     expect(done.stages.every((s) => s.state === "done")).toBe(true);
-    expect(done.approvals.filter((a) => a.status === "approved").map((a) => a.kind).sort()).toEqual(["architecture", "merge_to_main", "prod_deploy", "spec", "vision_roadmap"]);
+    expect(
+      done.approvals
+        .filter((a) => a.status === "approved")
+        .map((a) => a.kind)
+        .sort(),
+    ).toEqual(["architecture", "merge_to_main", "prod_deploy", "spec", "vision_roadmap"]);
     const kinds = new Set(done.documents.map((d) => d.kind));
-    for (const k of ["charter", "roadmap", "research", "prd", "ux_spec", "architecture", "adr", "threat_model", "plan", "test_plan", "release_notes", "runbook"]) expect(kinds, k).toContain(k);
-    const developDocs = [...repo.files.get("develop")!.entries()].filter(([path]) => path.startsWith("docs/"));
-    expect(developDocs.some(([path, content]) => path.startsWith("docs/product/") && content.includes("PRD"))).toBe(true);
-    expect(developDocs.some(([path, content]) => path.startsWith("docs/architecture/") && content.includes("Container Apps"))).toBe(true);
+    for (const k of [
+      "charter",
+      "roadmap",
+      "research",
+      "prd",
+      "ux_spec",
+      "architecture",
+      "adr",
+      "threat_model",
+      "plan",
+      "test_plan",
+      "release_notes",
+      "runbook",
+    ])
+      expect(kinds, k).toContain(k);
+    const developDocs = [...repo.files.get("develop")!.entries()].filter(([path]) =>
+      path.startsWith("docs/"),
+    );
+    expect(
+      developDocs.some(([path, content]) => path.startsWith("docs/product/") && content.includes("PRD")),
+    ).toBe(true);
+    expect(
+      developDocs.some(
+        ([path, content]) => path.startsWith("docs/architecture/") && content.includes("Container Apps"),
+      ),
+    ).toBe(true);
 
     const failed = await app.engine.listJobDTOs({ status: "failed" });
     expect(failed).toEqual([]);
@@ -171,7 +222,9 @@ describe("guardrails", () => {
   });
 
   it("pauses work on a budget overrun until the CEO grants extra credits", async () => {
-    await app.budget.upsertBudgets([{ scope: "company", scopeId: null, period: "month", limitCredits: 0.000001 }]);
+    await app.budget.upsertBudgets([
+      { scope: "company", scopeId: null, period: "month", limitCredits: 0.000001 },
+    ]);
     await app.db.insert(schema.usageLedger).values({ nanoAiu: 5_000, source: "estimate" });
     const thread = await app.chat.createThread();
     await app.chat.postCeoMessage(thread.id, "What's our status?");
@@ -186,12 +239,22 @@ describe("guardrails", () => {
 
   it("blocks upward delegation, loops and excessive depth", async () => {
     runtime.on("cpo", async (ctx) => {
-      const up = await ctx.callTool("delegate_task", { assignee: "chief-of-staff", title: "Do my job", instructions: "Please take this over entirely.", expectedOutput: "everything" });
+      const up = await ctx.callTool("delegate_task", {
+        assignee: "chief-of-staff",
+        title: "Do my job",
+        instructions: "Please take this over entirely.",
+        expectedOutput: "everything",
+      });
       ctx.say(up);
     });
     runtime.on("chief-of-staff", async (ctx) => {
       if (ctx.turn > 0) return void (await ctx.callTool("complete_task", { summary: "ok" }));
-      await ctx.callTool("delegate_task", { assignee: "cpo", title: "Prioritise backlog", instructions: "Rank the backlog by impact.", expectedOutput: "ranked list" });
+      await ctx.callTool("delegate_task", {
+        assignee: "cpo",
+        title: "Prioritise backlog",
+        instructions: "Rank the backlog by impact.",
+        expectedOutput: "ranked list",
+      });
     });
     const cos = (await app.org.agentForRole("chief-of-staff"))!;
     await app.engine.createJob({ agentId: cos.id, prompt: "Kick off" });
