@@ -68,6 +68,7 @@ export function createToolServices(app: Techgens, engine: JobEngine): ToolServic
       const company = await app.company.get();
       const team = await app.org.teamContext(target);
       const consultCaller: ToolCaller = { ...c, agentId: target.id, agentName: target.name, roleId: role.id };
+      const productId = c.initiativeId ? ((await app.lifecycle.get(c.initiativeId).catch(() => null))?.productId ?? null) : null;
       const systemPrompt = `${buildSystemPrompt({ company: { ...company }, role: roleDefinition(role), agentName: target.name, ...team })}\n\n## Consultation\n${c.agentName} is consulting you. Answer directly and concisely from your expertise and the company documents. Do not start new work.`;
       const session = await app.runtime.createSession(
         {
@@ -79,7 +80,7 @@ export function createToolServices(app: Techgens, engine: JobEngine): ToolServic
         },
         (e) => {
           if (e.type === "usage") {
-            void app.budget.recordUsage({ jobId: c.jobId, agentId: target.id, roleId: role.id, department: role.department, initiativeId: c.initiativeId, productId: null, model: e.model, nanoAiu: e.nanoAiu, premiumRequests: e.premiumRequests, inputTokens: e.inputTokens, outputTokens: e.outputTokens });
+            void app.budget.recordUsage({ jobId: c.jobId, agentId: target.id, roleId: role.id, department: role.department, initiativeId: c.initiativeId, productId, model: e.model, nanoAiu: e.nanoAiu, premiumRequests: e.premiumRequests, inputTokens: e.inputTokens, outputTokens: e.outputTokens });
           }
         },
       );

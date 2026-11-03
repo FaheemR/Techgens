@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { DEFAULT_GATE_POLICY, type GatePolicy } from "@techgens/core";
 import { schema, type Db } from "@techgens/db";
+import type { McpServerSpec } from "@techgens/runtime";
 import type { SecretBox } from "./crypto";
 
 export interface GitHubConnectionMeta {
@@ -21,6 +22,8 @@ export interface SettingsShape {
   autoMergeToIntegration: boolean;
   systemPaused: boolean;
   github: GitHubConnectionMeta;
+  /** MCP servers agents may use (key → command + explicit tool allowlist). Roles opt in via `mcp: [key]`. */
+  mcpServers: Record<string, McpServerSpec>;
 }
 
 export const DEFAULT_SETTINGS: SettingsShape = {
@@ -32,6 +35,7 @@ export const DEFAULT_SETTINGS: SettingsShape = {
   autoMergeToIntegration: true,
   systemPaused: false,
   github: { mode: null, login: null, userId: null, owner: null, appSlug: null, appId: null },
+  mcpServers: {},
 };
 
 /** Typed key/value settings plus encrypted secrets. */

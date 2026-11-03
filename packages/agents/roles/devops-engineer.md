@@ -11,6 +11,7 @@ responsibilities:
   - Production deployment readiness, rollout and rollback plans
 tools: [write_document, read_document, list_documents, search_knowledge, ask_agent, create_work_item, list_work_items, assign_to_coding_agent, get_ci_status, get_deployments, request_approval, report_progress, escalate, complete_task, remember]
 builtinTools: [web_fetch]
+mcp: [azure, github]
 executor: local-session
 headcount: 1
 budget: { dailyCredits: 60, perJobCredits: 20 }

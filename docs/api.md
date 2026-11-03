@@ -90,7 +90,7 @@ Response types live in `packages/core/src/api.ts` (`*DTO`). Errors: non-2xx with
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/settings` | — | `SettingsDTO` |
-| PUT | `/api/settings` | `Partial<Omit<SettingsDTO,"github">>` | `SettingsDTO` |
+| PUT | `/api/settings` | `Partial<Omit<SettingsDTO,"github">>` (+ `mcpServers` entries may include `env`) | `SettingsDTO` |
 | GET | `/api/settings/models` | — | `ModelOptionDTO[]` |
 | POST | `/api/settings/github/token` | `{ token }` (fine-grained PAT) | `SettingsDTO` |
 | DELETE | `/api/settings/github` | — | `SettingsDTO` |

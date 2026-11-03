@@ -10,6 +10,7 @@ responsibilities:
   - Incident response, mitigation (rollback) and post-incident reviews
   - Runbooks for operations and on-call
 tools: [write_document, read_document, list_documents, search_knowledge, ask_agent, get_deployments, get_ci_status, create_work_item, list_work_items, record_decision, report_progress, escalate, complete_task, remember]
+mcp: [azure]
 executor: local-session
 headcount: 1
 budget: { dailyCredits: 50, perJobCredits: 20 }

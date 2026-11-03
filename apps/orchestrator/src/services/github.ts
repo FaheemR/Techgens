@@ -211,6 +211,9 @@ export class GitHubService {
       policies: company.policies,
       roles: loadRolesFromDir(),
     });
+    // Approved specs (PRD, UX, architecture, ADRs…) ship with the skeleton so coding agents have full context.
+    const approvedDocs = (await this.app.docs.list({ limit: 500 })).filter((d) => d.productId === product.id && d.status === "approved");
+    for (const d of approvedDocs) files.push({ path: docsPathForDocument(d.kind as never, d.title), content: `${d.content.trim()}\n` });
     await port.commitFiles(ref, { branch: info.defaultBranch, message: "chore: bootstrap product repository (Techgens)", files });
     await port.createBranch(ref, product.integrationBranch, info.defaultBranch);
     await port.ensureLabels(ref, PRODUCT_LABELS);

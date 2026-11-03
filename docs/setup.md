@@ -36,7 +36,23 @@ Products deploy with **azd + Bicep** through GitHub Actions using **OIDC** (no s
    environment variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_LOCATION`, `AZURE_ENV_NAME`.
 3. Until these variables exist, the generated deploy workflow skips deployment with a notice (CI stays green).
 
-## 4. Running
+## 4. Optional: MCP servers for agents
+Roles can use read-only MCP servers you configure (`mcp:` in the role file: SRE/DevOps → `azure`, Security/DevOps →
+`github`, QA lead → `playwright`). Register them with `PUT /api/settings` — each needs an explicit tool allowlist:
+
+```json
+{ "mcpServers": {
+  "azure": { "command": "npx", "args": ["-y", "@azure/mcp@latest", "server", "start", "--read-only"],
+             "env": { "AZURE_TENANT_ID": "…", "AZURE_CLIENT_ID": "…", "AZURE_CLIENT_SECRET": "…" },
+             "tools": ["monitor", "containerapps", "group"] },
+  "github": { "command": "github-mcp-server", "args": ["stdio", "--read-only", "--toolsets", "actions,code_security"],
+              "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "…" }, "tools": ["list_workflow_runs", "list_code_scanning_alerts"] }
+} }
+```
+Use read-only modes and least-privilege credentials: MCP tools run with whatever access those credentials grant.
+Agents never get shell or file tools.
+
+## 5. Running
 ```sh
 cp .env.example .env    # optional: GITHUB_TOKEN_BOOTSTRAP, TECHGENS_SECRET_KEY
 docker compose up -d --build

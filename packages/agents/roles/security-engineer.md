@@ -11,6 +11,7 @@ responsibilities:
   - Security standards for auth, secrets, data protection and supply chain
 tools: [write_document, read_document, list_documents, search_knowledge, ask_agent, get_pr_status, get_pr_diff, review_pull_request, create_work_item, list_work_items, record_decision, report_progress, escalate, complete_task, remember]
 builtinTools: [web_fetch]
+mcp: [github]
 executor: local-session
 headcount: 1
 budget: { dailyCredits: 60, perJobCredits: 20 }

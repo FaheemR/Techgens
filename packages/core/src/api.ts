@@ -356,6 +356,8 @@ export interface SettingsDTO {
   maxDelegationDepth: number;
   maxConcurrentJobs: number;
   autoMergeToIntegration: boolean;
+  /** CEO-configured MCP servers (roles opt in with `mcp: [key]`); env values are never returned. */
+  mcpServers: Record<string, { command: string; args: string[]; tools: string[] }>;
   github: { connected: boolean; login: string | null; mode: "pat" | "app" | "demo" | null; appSlug: string | null; owner: string | null };
 }
 

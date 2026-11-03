@@ -1,30 +1,11 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import pino from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { ApprovalKind } from "@techgens/core";
 import { schema, type DbHandle } from "@techgens/db";
-import { TEST_DATABASE_URL, createTestDb } from "@techgens/db/testing";
-import { FakeAgentRuntime } from "@techgens/runtime";
-import { Techgens } from "../src/app";
-import { loadConfig } from "../src/config";
-import { installDemoScripts } from "../src/demo/scripts";
-import { ManualDispatcher } from "../src/engine/jobs";
-
-export async function createTestApp(h: DbHandle, runtime = installDemoScripts(new FakeAgentRuntime())): Promise<{ app: Techgens; runtime: FakeAgentRuntime }> {
-  const config = loadConfig({
-    AGENT_RUNTIME: "fake",
-    DATABASE_URL: TEST_DATABASE_URL,
-    TECHGENS_DATA_DIR: mkdtempSync(join(tmpdir(), "techgens-test-")),
-    TECHGENS_SECRET_KEY: "a".repeat(64),
-    LOG_LEVEL: "silent",
-  });
-  const app = new Techgens({ config, db: h.db, runtime, dispatcher: new ManualDispatcher(), logger: pino({ level: "silent" }) });
-  await app.init();
-  return { app, runtime };
-}
+import { createTestDb } from "@techgens/db/testing";
+import type { FakeAgentRuntime } from "@techgens/runtime";
+import type { Techgens } from "../src/app";
+import { createTestApp } from "./helpers";
 
 async function pendingKinds(app: Techgens): Promise<ApprovalKind[]> {
   return (await app.approvals.list("pending")).map((a) => a.kind).sort();
@@ -101,8 +82,10 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
     await app.engine.runUntilIdle();
     const prs = [...repo.prs.values()];
     expect(prs.filter((p) => p.merged && p.baseRef === "develop")).toHaveLength(3);
-    expect(prs.every((p) => p.reviews.some((r) => r.state === "APPROVED"))).toBe(true);
-    expect((await app.work.list({ initiativeId: ini!.id, kind: "task" })).every((t) => t.status === "done" && t.codingStatus === "merged")).toBe(true);
+    expect(prs.filter((p) => p.baseRef === "develop").every((p) => p.reviews.some((r) => r.state === "APPROVED"))).toBe(true);
+    const codingTasks = (await app.work.list({ initiativeId: ini!.id, kind: "task" })).filter((t) => t.forCodingAgent);
+    expect(codingTasks).toHaveLength(3);
+    expect(codingTasks.every((t) => t.status === "done" && t.codingStatus === "merged" && t.prUrl)).toBe(true);
 
     // Verification → release: CEO approves the merge to main; Techgens merges with the CEO's identity.
     expect(await pendingKinds(app)).toEqual(["merge_to_main"]);
@@ -123,7 +106,9 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
     expect(done.approvals.filter((a) => a.status === "approved").map((a) => a.kind).sort()).toEqual(["architecture", "merge_to_main", "prod_deploy", "spec", "vision_roadmap"]);
     const kinds = new Set(done.documents.map((d) => d.kind));
     for (const k of ["charter", "roadmap", "research", "prd", "ux_spec", "architecture", "adr", "threat_model", "plan", "test_plan", "release_notes", "runbook"]) expect(kinds, k).toContain(k);
-    expect(repo.files.get("develop")!.has("docs/product/invoicelite-mvp-prd.md")).toBe(true);
+    const developDocs = [...repo.files.get("develop")!.entries()].filter(([path]) => path.startsWith("docs/"));
+    expect(developDocs.some(([path, content]) => path.startsWith("docs/product/") && content.includes("PRD"))).toBe(true);
+    expect(developDocs.some(([path, content]) => path.startsWith("docs/architecture/") && content.includes("Container Apps"))).toBe(true);
 
     const failed = await app.engine.listJobDTOs({ status: "failed" });
     expect(failed).toEqual([]);

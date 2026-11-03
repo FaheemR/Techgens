@@ -33,6 +33,7 @@ export async function settingsDTO(app: Techgens): Promise<SettingsDTO> {
     maxDelegationDepth: s.maxDelegationDepth,
     maxConcurrentJobs: s.maxConcurrentJobs,
     autoMergeToIntegration: s.autoMergeToIntegration,
+    mcpServers: Object.fromEntries(Object.entries(s.mcpServers).map(([k, v]) => [k, { command: v.command, args: v.args ?? [], tools: v.tools }])),
     github: { connected: app.github.connected, login: s.github.login, mode: s.github.mode, appSlug: s.github.appSlug, owner: s.github.owner },
   };
 }
@@ -98,7 +99,8 @@ export async function buildServer(app: Techgens): Promise<FastifyInstance> {
     const q = parse(z.object({ since: z.coerce.number().optional() }), req.query);
     const lastId = Number(req.headers["last-event-id"] ?? q.since ?? NaN);
     reply.hijack();
-    reply.raw.writeHead(200, { ...reply.getHeaders(), "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+    const inherited = Object.fromEntries(Object.entries(reply.getHeaders()).filter(([, v]) => v !== undefined)) as Record<string, string | number | string[]>;
+    reply.raw.writeHead(200, { ...inherited, "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
     const send = (e: { id: string; type: string }) => reply.raw.write(`id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`);
     if (Number.isFinite(lastId)) for (const e of await app.bus.list({ since: lastId, limit: 500 })) send(e);
     reply.raw.write(`: connected\n\n`);
@@ -120,9 +122,13 @@ export async function buildServer(app: Techgens): Promise<FastifyInstance> {
         maxDelegationDepth: z.number().int().min(1).max(8).optional(),
         maxConcurrentJobs: z.number().int().min(1).max(20).optional(),
         autoMergeToIntegration: z.boolean().optional(),
+        mcpServers: z
+          .record(z.string().regex(/^[a-z][a-z0-9-]*$/), z.object({ command: z.string().min(1), args: z.array(z.string()).default([]), env: z.record(z.string(), z.string()).optional(), tools: z.array(z.string().min(1)).min(1) }))
+          .optional(),
       }),
       req.body,
     );
+    if (body.mcpServers) await app.settings.set("mcpServers", body.mcpServers);
     if (body.gatePolicy) await app.settings.set("gatePolicy", { ...(await app.settings.get("gatePolicy")), ...body.gatePolicy });
     if (body.roleModels) await app.settings.set("roleModels", Object.fromEntries(Object.entries(body.roleModels).filter(([, v]) => v)));
     if (body.maxDelegationDepth) await app.settings.set("maxDelegationDepth", body.maxDelegationDepth);

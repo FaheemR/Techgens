@@ -18,7 +18,7 @@ const rejected = (ctx: FakeTurnContext) => ctx.prompt.includes("The CEO REJECTED
 const delegatedDone = (ctx: FakeTurnContext) => ctx.prompt.startsWith("Your delegated work has finished");
 
 function deriveTitle(directive: string): { title: string; product?: string } {
-  const product = /\b(?:build|launch|create|ship)\s+([A-Z][\w-]+)/.exec(directive)?.[1];
+  const product = /\b(?:[Bb]uild|[Ll]aunch|[Cc]reate|[Ss]hip)\s+([A-Z][\w-]+)/.exec(directive)?.[1];
   const sentence = directive.split(/[.:\n]/)[0]!.trim();
   return { title: (product ? `${product} MVP` : sentence).slice(0, 70), product };
 }
@@ -64,7 +64,7 @@ export function installDemoScripts(rt: FakeAgentRuntime, options: { paceMs?: num
       await ctx.callTool("create_initiative", { title, summary: ctx.prompt.trim(), ...(product ? { productName: product } : {}) });
       return ctx.say(`On it. I opened the initiative **${title}** and started intake — I'll draft the charter and roadmap for your approval.`);
     }
-    if (ctx.labels.kind === "routine" || /report|standup/i.test(ctx.history[0] ?? "")) {
+    if (ctx.labels.kind === "routine") {
       const status = await ctx.callTool("get_status", {});
       await ctx.callTool("write_document", { kind: "report", title: `Executive report ${new Date().toISOString().slice(0, 10)}`, content: `# Executive report\n\n${status}` });
       return void (await ctx.callTool("complete_task", { summary: "Report published." }));

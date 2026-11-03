@@ -36,12 +36,24 @@ async function buildSessionConfig(engine: JobEngine, job: Job, agent: Agent, rol
     reasoningEffort: role.definition.reasoningEffort,
     tools: buildAgentTools(role.definition.tools, caller, createToolServices(app, engine)),
     builtinTools: role.definition.builtinTools,
+    mcpServers: await mcpServersFor(engine, role),
     maxAiCredits: role.definition.budget.perJobCredits || undefined,
     labels: { agentId: agent.id, roleId: role.id, jobId: job.id, kind: job.kind },
   };
 }
 
-function eventHandler(engine: JobEngine, job: Job, agent: Agent, role: Role, state: TurnState, pending: Promise<unknown>[]): AgentEventHandler {
+/** MCP servers configured by the CEO that the role opts into (unknown keys are ignored). */
+async function mcpServersFor(engine: JobEngine, role: Role): Promise<AgentSessionConfig["mcpServers"]> {
+  const configured = await engine.app.settings.get("mcpServers");
+  const out: NonNullable<AgentSessionConfig["mcpServers"]> = {};
+  for (const key of role.definition.mcp ?? []) {
+    const server = configured[key];
+    if (server?.tools.length) out[key] = server;
+  }
+  return out;
+}
+
+function eventHandler(engine: JobEngine, job: Job, agent: Agent, role: Role, state: TurnState, pending: Promise<unknown>[], productId: string | null): AgentEventHandler {
   const app = engine.app;
   const base = { actorType: "agent" as const, actorId: agent.id, subjectType: "job", subjectId: job.id };
   return (e) => {
@@ -64,7 +76,7 @@ function eventHandler(engine: JobEngine, job: Job, agent: Agent, role: Role, sta
               roleId: role.id,
               department: role.department,
               initiativeId: job.initiativeId,
-              productId: null,
+              productId,
               model: e.model,
               nanoAiu: e.nanoAiu,
               premiumRequests: e.premiumRequests,
@@ -90,7 +102,8 @@ export async function runJobTurns(engine: JobEngine, job: Job, agent: Agent, rol
   const state = engine.turnState(job.id);
   const pending: Promise<unknown>[] = [];
   const config = await buildSessionConfig(engine, job, agent, role);
-  const onEvent = eventHandler(engine, job, agent, role, state, pending);
+  const productId = job.initiativeId ? ((await app.lifecycle.get(job.initiativeId).catch(() => null))?.productId ?? null) : null;
+  const onEvent = eventHandler(engine, job, agent, role, state, pending, productId);
   const thread = job.threadId ? await app.chat.getThread(job.threadId) : null;
   const existing = thread?.sessionId ?? job.sessionId;
 
