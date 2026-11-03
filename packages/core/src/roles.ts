@@ -16,6 +16,8 @@ export const roleFrontmatterSchema = z.object({
   model: z.string().optional(),
   reasoningEffort: z.enum(REASONING_EFFORTS).optional(),
   tools: z.array(z.enum(AGENT_TOOL_NAMES)).default([]),
+  /** Copilot built-in tools allowed in local sessions (e.g. "web_fetch"); shell/file tools are never allowed. */
+  builtinTools: z.array(z.enum(["web_fetch"])).default([]),
   /** Read-only MCP servers the role may use (keys from the MCP catalog, e.g. "github", "azure", "playwright"). */
   mcp: z.array(z.string()).default([]),
   executor: z.enum(EXECUTORS).default("local-session"),
