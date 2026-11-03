@@ -303,7 +303,13 @@ export class DeliveryService {
     const testPlan = docs.find((d) => d.kind === "test_plan");
     const documentIds = [releaseNotes?.id, testPlan?.id].filter((x): x is string => Boolean(x));
     try {
-      const changes = await this.releasedChanges(ini.id);
+      const merged = await this.releasedChanges(ini.id);
+      // GitHub facts win over the agent's claims; the agent's own notes only fill gaps.
+      const changes = merged.length
+        ? merged
+        : Array.isArray(given.changes)
+          ? given.changes.filter((c): c is string => typeof c === "string")
+          : [];
       const payload =
         kind === "merge_to_main"
           ? await this.mergeEvidence(ini, given, changes, releaseNotes)
@@ -335,7 +341,11 @@ export class DeliveryService {
   ): Promise<Partial<MergeToMainPayload>> {
     const evidence: Partial<MergeToMainPayload> = {
       changes,
-      releaseNotes: releaseNotes ? excerpt(releaseNotes) : null,
+      releaseNotes: releaseNotes
+        ? excerpt(releaseNotes)
+        : typeof given.releaseNotes === "string"
+          ? given.releaseNotes
+          : null,
       ...(releaseNotes ? { releaseNotesDocumentId: releaseNotes.id } : {}),
     };
     const prNumber = Number(given.prNumber ?? ini.metadata.releasePrNumber);

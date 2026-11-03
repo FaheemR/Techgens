@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { periodStart, type BudgetOverrunPayload } from "@techgens/core";
 import { schema, type DbHandle } from "@techgens/db";
 import { createTestDb } from "@techgens/db/testing";
+import type { FakeAgentRuntime } from "@techgens/runtime";
 import type { Techgens } from "../src/app";
 import { createTestApp } from "./helpers";
 
@@ -297,5 +298,58 @@ describe("governance: budget grants and notifications", () => {
     expect(await unreadApprovalNotifications(app, manual.id)).toHaveLength(1);
     await app.approvals.decide(manual.id, { outcome: "approved", comment: "Stripe" });
     expect(await unreadApprovalNotifications(app, manual.id)).toEqual([]);
+  });
+});
+
+describe("governance: gates filed by the engine", () => {
+  let h: DbHandle;
+  let app: Techgens;
+  let runtime: FakeAgentRuntime;
+
+  beforeAll(async () => {
+    h = await createTestDb();
+    ({ app, runtime } = await createTestApp(h));
+  });
+  afterAll(async () => {
+    await h.close();
+  });
+
+  it("pauses on a rejected engine-filed gate and files a new gate after the restart", async () => {
+    // This Chief of Staff finishes intake without requesting approval: the engine files the gate itself.
+    runtime.on("chief-of-staff", async (ctx) => {
+      const revised = ctx.prompt.includes("The CEO rejected the previous proposal");
+      await ctx.callTool("write_document", {
+        kind: "charter",
+        title: "Ledger charter",
+        content: revised ? "# Charter\n\nReceipts only." : "# Charter\n\nEverything.",
+      });
+      await ctx.callTool("complete_task", { summary: revised ? "Narrowed the charter." : "Charter ready." });
+    });
+    const ini = await app.lifecycle.create({
+      title: "Ledger",
+      directive: "Build Ledger: bookkeeping for freelancers",
+    });
+    await app.engine.runUntilIdle();
+    const [gate] = await pendingFor(app, ini.id);
+    expect(gate).toMatchObject({ kind: "vision_roadmap", payload: { stage: "intake" } });
+
+    await app.approvals.decide(gate!.id, { outcome: "rejected", comment: "Receipts only" });
+    expect(await app.lifecycle.get(ini.id)).toMatchObject({
+      status: "paused",
+      statusReason: "Rejected at Vision & roadmap: Receipts only",
+    });
+    await app.lifecycle.resume(ini.id);
+    await app.engine.runUntilIdle();
+    const [again] = await pendingFor(app, ini.id);
+    expect(again).toMatchObject({ kind: "vision_roadmap", summary: "Narrowed the charter.", round: 1 });
+    expect(again!.id).not.toBe(gate!.id);
+    expect((await app.work.list({ initiativeId: ini.id, kind: "stage" })).map((w) => w.status)).toEqual([
+      "in_progress",
+    ]);
+    expect(await openJobs(app, ini.id)).toEqual([]);
+
+    await app.approvals.decide(again!.id, { outcome: "approved", comment: "Go" });
+    await app.engine.runUntilIdle();
+    expect((await app.lifecycle.get(ini.id)).stage).not.toBe("intake");
   });
 });

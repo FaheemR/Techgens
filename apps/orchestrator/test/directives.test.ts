@@ -66,6 +66,13 @@ describe("demo Chief of Staff: reading CEO messages", () => {
       product: "InvoiceLite",
       existingProduct: true,
     });
+    expect(
+      deriveTitle("Build a pet-sitting marketplace MVP in 8 weeks with a budget of 50 credits per week."),
+    ).toEqual({
+      title: "Build a pet-sitting marketplace MVP",
+      product: "Pet-sitting marketplace",
+      existingProduct: false,
+    });
     expect(deriveTitle("Build a pet-sitting marketplace MVP in 8 weeks.")).toEqual({
       title: "Build a pet-sitting marketplace MVP",
       product: "Pet-sitting marketplace",

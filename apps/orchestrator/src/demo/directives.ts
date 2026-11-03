@@ -107,7 +107,10 @@ export function deriveTitle(directive: string, existingProducts: readonly string
       existingProduct: Boolean(match),
     };
   }
-  const clause = (text.split(CLAUSE_BREAK)[0] ?? text).replace(TRAILING_DETAILS, "").trim() || text;
+  let clause = (text.split(CLAUSE_BREAK)[0] ?? text).trim();
+  // Timeline and budget details belong in the charter, not the name ("… MVP in 8 weeks with a budget of …").
+  while (TRAILING_DETAILS.test(clause)) clause = clause.replace(TRAILING_DETAILS, "").trim();
+  clause ||= text;
   const title = shortenTitle(clause);
   if (existing) return { title, product: existing, existingProduct: true };
   const referenced = [...text.matchAll(REFERENCED_PRODUCT)]
