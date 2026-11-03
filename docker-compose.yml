@@ -1,6 +1,6 @@
-# Techgens — local, single-user deployment.
-#   docker compose up -d --build                      # Copilot-powered agents (connect GitHub in Settings)
-#   AGENT_RUNTIME=fake docker compose up -d --build   # demo mode: scripted agents + simulated GitHub, no AI credits
+# Techgens — local, single-user deployment. Set AGENT_RUNTIME in .env ("fake" = demo mode, "copilot" = real agents).
+#   docker compose pull && docker compose up -d   # prebuilt images published by this repository's GitHub Actions
+#   docker compose up -d --build                  # or build locally (needs the npm registry, or NPM_REGISTRY=<mirror>)
 # Then open http://localhost:3000. Ports are bound to 127.0.0.1 only: there is no login, so never expose them.
 name: techgens
 
@@ -21,9 +21,13 @@ services:
     restart: unless-stopped
 
   orchestrator:
+    image: ${TECHGENS_IMAGE_PREFIX:-ghcr.io/faheemr/techgens}-orchestrator:${TECHGENS_TAG:-latest}
     build:
       context: .
       dockerfile: apps/orchestrator/Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+    init: true
     environment:
       DATABASE_URL: postgres://techgens:techgens@postgres:5432/techgens
       # Public address of Techgens (the web app proxies /api/* to the orchestrator), used for GitHub callbacks.
@@ -45,9 +49,12 @@ services:
     restart: unless-stopped
 
   web:
+    image: ${TECHGENS_IMAGE_PREFIX:-ghcr.io/faheemr/techgens}-web:${TECHGENS_TAG:-latest}
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
     environment:
       ORCHESTRATOR_URL: http://orchestrator:4000
     ports:

@@ -32,7 +32,8 @@ touches no real repositories. All you need is Docker (or a GitHub Codespace).
 ```sh
 git clone https://github.com/FaheemR/Techgens.git && cd Techgens
 cp .env.example .env                  # then set AGENT_RUNTIME=fake in .env
-docker compose up -d --build          # first build: about 3–6 minutes
+docker compose pull                   # prebuilt images (no local build, no npm access needed)
+docker compose up -d
 ```
 
 Open **http://localhost:3000**, give the Chief of Staff a directive (*"Build InvoiceLite: invoicing SaaS for
@@ -40,6 +41,8 @@ freelancers. MVP in 6 weeks, budget 400 credits."*) and approve the gates as the
 
 No Docker? Open the repository in **GitHub Codespaces** (Code → Codespaces), run
 `AGENT_RUNTIME=fake docker compose up -d --build` in its terminal and open port 3000 from the **Ports** tab.
+Building yourself (`docker compose up -d --build`) needs access to the npm registry — on networks that block it, use
+the prebuilt images or your organisation's npm mirror ([details](docs/getting-started.md#networks-that-block-public-package-registries)).
 
 ➡️ **[Getting started](docs/getting-started.md)**: a guided 10-minute tour, switching to real Copilot agents, and
 troubleshooting.

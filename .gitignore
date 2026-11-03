@@ -13,3 +13,7 @@ test-results/
 playwright-report/
 .DS_Store
 *.log
+
+# Organisation CA certificates for image builds (docker/certs/README.md)
+docker/certs/*.crt
+docker/certs/*.pem

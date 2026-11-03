@@ -17,13 +17,17 @@ cd Techgens
 cp .env.example .env            # Windows PowerShell: Copy-Item .env.example .env
 ```
 
-Open `.env` in an editor and set `AGENT_RUNTIME=fake`, then:
+Open `.env` in an editor and set `AGENT_RUNTIME=fake`, then start the prebuilt images:
 
 ```sh
-docker compose up -d --build    # first build takes about 3–6 minutes
+docker compose pull             # downloads the images built by this repository's GitHub Actions
+docker compose up -d
 ```
 
 Open **http://localhost:3000**.
+
+To build the images yourself instead, run `docker compose up -d --build` (about 3–6 minutes; it downloads npm
+packages, see [below](#networks-that-block-public-package-registries) if your network blocks them).
 
 ### B. In the browser with GitHub Codespaces (nothing to install)
 
@@ -33,6 +37,18 @@ Open **http://localhost:3000**.
    AGENT_RUNTIME=fake docker compose up -d --build
    ```
 3. Open the **Ports** tab and open port **3000** in the browser (the port stays private to you).
+
+### Networks that block public package registries
+
+Many company networks block registry.npmjs.org (the build then fails with `ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE`
+or a timeout). Stay within your organisation's policy and use one of these:
+
+1. **Prebuilt images** (above): `docker compose pull` only downloads container images from `ghcr.io`; nothing is
+   installed from npm on your machine. In demo mode Techgens needs no internet access at all once started.
+2. **Your organisation's npm mirror** (Artifactory, Azure Artifacts, Nexus…): set `NPM_REGISTRY=https://<mirror>/`
+   in `.env` and run `docker compose up -d --build`. If the mirror uses a private certificate authority, save its
+   root certificate as `docker/certs/<name>.crt` first.
+3. **GitHub Codespaces** (option B): the build runs in GitHub's cloud.
 
 ### Is it running?
 
@@ -89,7 +105,7 @@ docker compose stop                 # stop (data kept)
 docker compose start                # start again
 docker compose logs -f orchestrator # follow the orchestrator logs
 docker compose down -v              # remove containers and ALL data
-git pull && docker compose up -d --build   # update to the latest version
+git pull && docker compose pull && docker compose up -d   # update to the latest version
 ```
 
 ## Troubleshooting
@@ -99,4 +115,6 @@ git pull && docker compose up -d --build   # update to the latest version
 | “Orchestrator unreachable” banner | `docker compose ps` and `docker compose logs orchestrator`; the orchestrator waits for Postgres to be healthy. |
 | Port 3000 is already in use | In `docker-compose.yml` change `127.0.0.1:3000:3000` to e.g. `127.0.0.1:3001:3000`, and set `TECHGENS_PUBLIC_URL` / `TECHGENS_WEB_URL` in `.env` to `http://localhost:3001`. |
 | Build fails or is killed | Give Docker at least 4 GB of memory (Docker Desktop → Settings → Resources). |
+| Build fails with `ERR_SSL_…HANDSHAKE_FAILURE` or `ETIMEDOUT` on `npm install` | Your network blocks the npm registry — use the prebuilt images (`docker compose pull`) or an npm mirror ([see above](#networks-that-block-public-package-registries)). |
+| `docker compose pull` says `denied` or `unauthorized` | The images are not public yet: the repository owner makes them public once (GitHub → Packages → each `techgens-*` package → Package settings → Change visibility → Public), or run `docker login ghcr.io` first. |
 | Real mode: agents stay idle | Check the notification “Agents are waiting for GitHub”: connect a token in **Settings**, and make sure your Copilot plan and organisation policies allow Copilot CLI/SDK use. |
