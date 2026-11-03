@@ -5,15 +5,22 @@ import { DEFAULT_INITIATIVE_BUDGET_CREDITS } from "@techgens/core";
  * prompt): questions get an answer, directives become initiatives with a short title and an explicit total budget cap.
  */
 
-const QUESTION_START =
-  /^(?:what|how|why|when|where|who|which|is|are|can|could|should|do|does|did|status|show|list)\b/i;
+const QUESTION_START = /^(?:what|how|why|when|where|who|which|is|are|can|could|should|does|did|status)\b/i;
+/** "Do/show/list" are also imperatives ("Do a competitive analysis…", "List the risks… and propose mitigations"). */
+const ASKING_IMPERATIVE =
+  /^(?:do\s+(?:we|you|i|they|our)\b|show\s+me\b|(?:show|list)\s+(?:(?:all|the|our|my|open|pending|active|current)\s+)*(?:initiatives?|approvals?|agents?|budgets?|spend|costs?|incidents?|deployments?|tasks?|work(?:\s+items?)?|goals?|okrs?|products?|documents?|jobs?)\b)/i;
 const STATUS_REQUEST =
   /^(?:(?:please\s+)?(?:give|send|tell)\s+me\b|brief\s+me\b|any\s+(?:news|updates?)\b|where\s+are\s+we\b)|\b(?:status|progress)\s+(?:report|update)\b/i;
 
 /** Questions and status requests are answered directly; they never create work. */
 export function isQuestion(message: string): boolean {
   const text = message.trim();
-  return text.endsWith("?") || QUESTION_START.test(text) || STATUS_REQUEST.test(text);
+  return (
+    text.endsWith("?") ||
+    QUESTION_START.test(text) ||
+    ASKING_IMPERATIVE.test(text) ||
+    STATUS_REQUEST.test(text)
+  );
 }
 
 const LEAD_IN =

@@ -76,7 +76,7 @@ export function MilestoneRoadmap({
                 style={{ left: position(now) }}
                 aria-hidden
               >
-                <span className="absolute -top-0.5 left-1 whitespace-nowrap text-[10px] font-medium text-accent">
+                <span className="absolute -top-0.5 left-1 whitespace-nowrap text-[11px] font-medium text-accent">
                   Today
                 </span>
               </div>

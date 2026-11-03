@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import {
   DomainError,
   truncate,
@@ -545,7 +545,12 @@ export class DeliveryService {
       .select()
       .from(schema.workItems)
       .where(
-        and(eq(schema.workItems.forCodingAgent, true), inArray(schema.workItems.codingStatus, ACTIVE_CODING)),
+        and(
+          eq(schema.workItems.forCodingAgent, true),
+          inArray(schema.workItems.codingStatus, ACTIVE_CODING),
+          // Tasks of cancelled initiatives keep their last coding status; PR activity must not revive them.
+          ne(schema.workItems.status, "cancelled"),
+        ),
       );
     for (const item of items) {
       try {

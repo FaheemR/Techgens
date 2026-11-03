@@ -73,7 +73,8 @@ troubleshooting.
 
 More: [getting started](docs/getting-started.md) · [architecture](docs/architecture.md) ·
 [CEO operating manual](docs/operating-manual.md) · [GitHub, Copilot & Azure setup](docs/setup.md) ·
-[authoring roles](docs/roles.md) · [prior-art research](docs/research/prior-art.md).
+[authoring roles](docs/roles.md) · [prior-art research](docs/research/prior-art.md) ·
+[UI/UX review](docs/reviews/2026-11-03-ux-review/README.md).
 
 ## Development
 

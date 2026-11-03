@@ -245,8 +245,14 @@ export class LifecycleService {
       if (job.status === "waiting" || job.status === "queued" || job.status === "running") return; // engine resumes the job
     }
     const ini = await this.get(a.initiativeId);
-    if (ini.stage !== stage || ini.status !== "active") return;
-    if (outcome === "approved") return this.advance(ini.id);
+    if (ini.stage !== stage) return;
+    if (outcome === "approved") {
+      // While paused, resume() moves the stage on (the finished stage job sees the approved gate).
+      if (ini.status === "active") return this.advance(ini.id);
+      return;
+    }
+    if (ini.status !== "active" && ini.status !== "paused") return;
+    // While paused the reopened job stays queued until resume() dispatches it, so the feedback isn't lost.
     if (a.jobId)
       await this.app.engine.reopenJob(
         a.jobId,
@@ -375,9 +381,13 @@ export class LifecycleService {
     if (ini.status === "active") return ini;
     if (ini.status === "cancelled" || ini.status === "completed")
       throw new DomainError(`a ${ini.status} initiative can't be resumed`, "conflict");
-    const rejected = ini.metadata.rejectedApprovalId
+    const remembered = ini.metadata.rejectedApprovalId
       ? await this.app.approvals.get(ini.metadata.rejectedApprovalId).catch(() => null)
       : null;
+    // Initiatives paused by a rejection before `rejectedApprovalId` existed: the stage's latest gate is still rejected.
+    const gate = STAGES[ini.stage].gate;
+    const latestGate = !remembered && gate ? await this.app.approvals.latest(id, gate) : null;
+    const rejected = remembered ?? (latestGate?.status === "rejected" ? latestGate : null);
     const row = await this.setStatus(id, "active");
     const open = await this.app.db
       .select()

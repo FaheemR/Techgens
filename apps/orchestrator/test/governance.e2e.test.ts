@@ -352,4 +352,64 @@ describe("governance: gates filed by the engine", () => {
     await app.engine.runUntilIdle();
     expect((await app.lifecycle.get(ini.id)).stage).not.toBe("intake");
   });
+
+  it("keeps changes requested while paused and reworks the stage when resumed", async () => {
+    runtime.on("chief-of-staff", async (ctx) => {
+      const revised = ctx.prompt.includes("The CEO requested changes");
+      await ctx.callTool("write_document", {
+        kind: "charter",
+        title: "Abacus charter",
+        content: revised ? "# Charter\n\nInvoices only." : "# Charter\n\nEverything.",
+      });
+      await ctx.callTool("complete_task", { summary: revised ? "Scoped to invoices." : "Charter ready." });
+    });
+    const ini = await app.lifecycle.create({
+      title: "Abacus",
+      directive: "Build Abacus: invoicing for agencies",
+    });
+    await app.engine.runUntilIdle();
+    const [gate] = await pendingFor(app, ini.id);
+    expect(gate).toMatchObject({ kind: "vision_roadmap", summary: "Charter ready." });
+
+    await app.lifecycle.pause(ini.id, "Paused by the CEO");
+    await app.approvals.decide(gate!.id, { outcome: "changes_requested", comment: "Invoices only" });
+    await app.engine.runUntilIdle();
+    expect(await pendingFor(app, ini.id)).toEqual([]);
+
+    await app.lifecycle.resume(ini.id);
+    await app.engine.runUntilIdle();
+    const [again] = await pendingFor(app, ini.id);
+    expect(again).toMatchObject({ kind: "vision_roadmap", summary: "Scoped to invoices." });
+    expect(await openJobs(app, ini.id)).toEqual([]);
+  });
+
+  it("restarts a stage rejected before the upgrade instead of resubmitting the rejected proposal", async () => {
+    runtime.on("chief-of-staff", async (ctx) => {
+      const revised = ctx.prompt.includes("The CEO rejected the previous proposal");
+      await ctx.callTool("write_document", {
+        kind: "charter",
+        title: "Tally charter",
+        content: revised ? "# Charter\n\nPayroll only." : "# Charter\n\nEverything.",
+      });
+      await ctx.callTool("complete_task", { summary: revised ? "Narrowed to payroll." : "Charter ready." });
+    });
+    const ini = await app.lifecycle.create({
+      title: "Tally",
+      directive: "Build Tally: payroll for freelancers",
+    });
+    await app.engine.runUntilIdle();
+    const [gate] = await pendingFor(app, ini.id);
+    await app.approvals.decide(gate!.id, { outcome: "rejected", comment: "Payroll only" });
+    // Rows paused by a rejection before the upgrade have no metadata.rejectedApprovalId.
+    const { rejectedApprovalId: _rejected, ...legacy } = (await app.lifecycle.get(ini.id)).metadata;
+    await app.db
+      .update(schema.initiatives)
+      .set({ metadata: legacy })
+      .where(eq(schema.initiatives.id, ini.id));
+
+    await app.lifecycle.resume(ini.id);
+    await app.engine.runUntilIdle();
+    const [again] = await pendingFor(app, ini.id);
+    expect(again).toMatchObject({ kind: "vision_roadmap", summary: "Narrowed to payroll." });
+  });
 });

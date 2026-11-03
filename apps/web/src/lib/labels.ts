@@ -161,7 +161,7 @@ export const APPROVAL_KIND_TONE: Record<ApprovalKind, Tone> = {
   spec: "info",
   architecture: "accent",
   merge_to_main: "success",
-  prod_deploy: "danger",
+  prod_deploy: "warning",
   budget_overrun: "warning",
   hire: "neutral",
   decision: "neutral",

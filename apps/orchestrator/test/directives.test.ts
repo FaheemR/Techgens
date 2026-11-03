@@ -12,6 +12,8 @@ describe("demo Chief of Staff: reading CEO messages", () => {
       "Can you summarise InvoiceLite",
       "Give me an update",
       "Is InvoiceLite on track",
+      "Do we have budget left",
+      "List our open approvals",
     ]) {
       expect(isQuestion(q), q).toBe(true);
     }
@@ -21,6 +23,9 @@ describe("demo Chief of Staff: reading CEO messages", () => {
       "Cancel nothing, build a status page for InvoiceLite",
       "Isolate payments into a service",
       "Update the pricing page copy",
+      "Do a competitive analysis of expense-tracking apps and recommend a positioning.",
+      "List the risks of entering the EU market and propose mitigations",
+      "Show customers a usage dashboard in InvoiceLite",
     ]) {
       expect(isQuestion(d), d).toBe(false);
     }
