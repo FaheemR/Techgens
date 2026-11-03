@@ -175,6 +175,9 @@ function InitiativeCard({ initiative }: { initiative: InitiativeSummaryDTO }) {
   const now = useNow();
   const { workItems } = initiative;
   const budgetRatio = initiative.budgetCredits ? initiative.spentCredits / initiative.budgetCredits : null;
+  const finished = initiative.status === "completed" || initiative.status === "cancelled";
+  const awaiting = finished ? 0 : initiative.pendingApprovals;
+  const reason = initiative.statusReason?.trim();
   return (
     <Link
       href={`/initiatives/${initiative.id}`}
@@ -189,6 +192,16 @@ function InitiativeCard({ initiative }: { initiative: InitiativeSummaryDTO }) {
         </div>
         <InitiativeStatusBadge status={initiative.status} />
       </div>
+      {reason ? (
+        <p
+          className={cn(
+            "mt-1.5 line-clamp-2 text-xs",
+            initiative.status === "paused" ? "text-amber-200" : "text-muted",
+          )}
+        >
+          {reason}
+        </p>
+      ) : null}
 
       <p className="mt-3 line-clamp-2 min-h-10 text-sm text-muted">
         {initiative.summary || initiative.directive}
@@ -197,9 +210,9 @@ function InitiativeCard({ initiative }: { initiative: InitiativeSummaryDTO }) {
       <div className="mt-4 space-y-1.5">
         <div className="flex items-center justify-between text-xs">
           <span className="font-medium text-fg">{stageShortTitle(initiative.stage)}</span>
-          {initiative.pendingApprovals > 0 ? (
+          {awaiting > 0 ? (
             <Badge tone="warning" dot pulse>
-              {initiative.pendingApprovals} awaiting you
+              {awaiting} awaiting you
             </Badge>
           ) : (
             <span className="text-subtle">
@@ -207,11 +220,7 @@ function InitiativeCard({ initiative }: { initiative: InitiativeSummaryDTO }) {
             </span>
           )}
         </div>
-        <StageBar
-          stage={initiative.stage}
-          status={initiative.status}
-          waitingOnCeo={initiative.pendingApprovals > 0}
-        />
+        <StageBar stage={initiative.stage} status={initiative.status} waitingOnCeo={awaiting > 0} />
       </div>
 
       <div className="mt-auto grid grid-cols-3 gap-3 border-t border-border/70 pt-3 text-xs">

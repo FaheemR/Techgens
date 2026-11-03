@@ -33,14 +33,30 @@ export function NewInitiativeDialog({ open, onClose }: { open: boolean; onClose:
   );
 }
 
+type FieldErrors = Partial<Record<"title" | "directive" | "budget", string>>;
+
+function titleError(value: string): string | undefined {
+  return value.trim().length < 3 ? "Give the initiative a name (at least 3 characters)" : undefined;
+}
+
+function directiveError(value: string): string | undefined {
+  return value.trim().length < 10 ? "Describe the outcome you want (at least a sentence)" : undefined;
+}
+
+function budgetError(value: string): string | undefined {
+  if (value.trim() === "") return undefined;
+  const n = Number(value);
+  return !Number.isFinite(n) || n <= 0 ? "Enter a positive number, or leave empty" : undefined;
+}
+
+/**
+ * Uncontrolled fields read with FormData on submit: what the CEO sees in the fields is what gets submitted, even when
+ * text arrives without a React change event (autofill, paste helpers, automation) or a re-render races the click.
+ */
 function NewInitiativeForm({ onDone }: { onDone: () => void }) {
   const router = useRouter();
   const products = useProducts();
-  const [title, setTitle] = useState("");
-  const [directive, setDirective] = useState("");
-  const [productId, setProductId] = useState("");
-  const [targetDate, setTargetDate] = useState("");
-  const [budget, setBudget] = useState("");
+  const [errors, setErrors] = useState<FieldErrors>({});
   const [touched, setTouched] = useState(false);
 
   const create = useApiMutation(
@@ -56,39 +72,61 @@ function NewInitiativeForm({ onDone }: { onDone: () => void }) {
     },
   );
 
-  const titleError =
-    touched && title.trim().length < 3 ? "Give the initiative a name (at least 3 characters)" : undefined;
-  const directiveError =
-    touched && directive.trim().length < 10
-      ? "Describe the outcome you want (at least a sentence)"
-      : undefined;
-  const budgetValue = budget.trim() === "" ? undefined : Number(budget);
-  const budgetError =
-    budgetValue !== undefined && (!Number.isFinite(budgetValue) || budgetValue <= 0)
-      ? "Enter a positive number, or leave empty"
-      : undefined;
+  // After the first submit attempt, errors update as the CEO types; the budget is checked from the start.
+  function revalidate(key: keyof FieldErrors, value: string) {
+    if (key !== "budget" && !touched) return;
+    const message =
+      key === "title" ? titleError(value) : key === "directive" ? directiveError(value) : budgetError(value);
+    setErrors((current) => (current[key] === message ? current : { ...current, [key]: message }));
+  }
 
-  function submit(event: FormEvent) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const read = (key: string) => {
+      const value = data.get(key);
+      return typeof value === "string" ? value : "";
+    };
+    const title = read("title");
+    const directive = read("directive");
+    const budget = read("budget");
+    const next: FieldErrors = {
+      title: titleError(title),
+      directive: directiveError(directive),
+      budget: budgetError(budget),
+    };
     setTouched(true);
-    if (title.trim().length < 3 || directive.trim().length < 10 || budgetError) return;
+    setErrors(next);
+    const firstInvalid = next.title
+      ? "ni-title"
+      : next.directive
+        ? "ni-directive"
+        : next.budget
+          ? "ni-budget"
+          : null;
+    if (firstInvalid) {
+      document.getElementById(firstInvalid)?.focus();
+      return;
+    }
     const body: CreateInitiativeBody = { title: title.trim(), directive: directive.trim() };
+    const productId = read("productId");
     if (productId) body.productId = productId;
-    const iso = dateInputToIso(targetDate);
+    const iso = dateInputToIso(read("targetDate"));
     if (iso) body.targetDate = iso;
-    if (budgetValue !== undefined) body.budgetCredits = budgetValue;
+    if (budget.trim() !== "") body.budgetCredits = Number(budget);
     create.mutate(body);
   }
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
-      <Field label="Title" htmlFor="ni-title" required error={titleError}>
+      <Field label="Title" htmlFor="ni-title" required error={errors.title}>
         <Input
           id="ni-title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          name="title"
+          defaultValue=""
+          onInput={(e) => revalidate("title", e.currentTarget.value)}
           placeholder="InvoiceLite MVP"
-          aria-invalid={Boolean(titleError)}
+          aria-invalid={Boolean(errors.title)}
           autoFocus
         />
       </Field>
@@ -96,21 +134,22 @@ function NewInitiativeForm({ onDone }: { onDone: () => void }) {
         label="Directive"
         htmlFor="ni-directive"
         required
-        error={directiveError}
+        error={errors.directive}
         hint="What should be built, for whom, and why. Include constraints, deadline and success metrics if you have them."
       >
         <Textarea
           id="ni-directive"
-          value={directive}
-          onChange={(e) => setDirective(e.target.value)}
+          name="directive"
+          defaultValue=""
+          onInput={(e) => revalidate("directive", e.currentTarget.value)}
           rows={5}
           placeholder="Build InvoiceLite: invoicing SaaS for freelancers. MVP in 6 weeks with client management, invoice PDFs and Stripe payments."
-          aria-invalid={Boolean(directiveError)}
+          aria-invalid={Boolean(errors.directive)}
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Product" htmlFor="ni-product" hint="Optional">
-          <Select id="ni-product" value={productId} onChange={(e) => setProductId(e.target.value)}>
+          <Select id="ni-product" name="productId" defaultValue="">
             <option value="">New / unspecified</option>
             {(products.data ?? []).map((p) => (
               <option key={p.id} value={p.id}>
@@ -120,24 +159,20 @@ function NewInitiativeForm({ onDone }: { onDone: () => void }) {
           </Select>
         </Field>
         <Field label="Target date" htmlFor="ni-date" hint="Optional">
-          <Input
-            id="ni-date"
-            type="date"
-            value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
-          />
+          <Input id="ni-date" name="targetDate" type="date" defaultValue="" />
         </Field>
-        <Field label="Budget (credits)" htmlFor="ni-budget" hint="Optional cap" error={budgetError}>
+        <Field label="Budget (credits)" htmlFor="ni-budget" hint="Optional cap" error={errors.budget}>
           <Input
             id="ni-budget"
+            name="budget"
             type="number"
             min={1}
-            step={10}
+            step="any"
             inputMode="decimal"
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
+            defaultValue=""
+            onInput={(e) => revalidate("budget", e.currentTarget.value)}
             placeholder="2400"
-            aria-invalid={Boolean(budgetError)}
+            aria-invalid={Boolean(errors.budget)}
           />
         </Field>
       </div>
