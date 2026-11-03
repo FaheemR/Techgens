@@ -31,7 +31,7 @@ export function MessageBubble({
     return (
       <div className="flex justify-center">
         <div className="max-w-xl rounded-lg border border-border bg-surface-2/60 px-3 py-1.5 text-center text-xs text-muted">
-          <MarkdownView content={message.content} compact />
+          <MarkdownView content={message.content} compact headingOffset={2} />
         </div>
       </div>
     );
@@ -47,7 +47,7 @@ export function MessageBubble({
             <span className="font-medium text-muted">You</span>
           </div>
           <div className="rounded-2xl rounded-tr-sm border border-accent/25 bg-accent/[0.09] px-4 py-2.5">
-            <MarkdownView content={message.content} compact />
+            <MarkdownView content={message.content} compact headingOffset={2} />
           </div>
         </div>
         <CeoAvatar />
@@ -67,7 +67,7 @@ export function MessageBubble({
           </time>
         </div>
         <div className="rounded-2xl rounded-tl-sm border border-border bg-surface-2 px-4 py-3">
-          <MarkdownView content={message.content} compact />
+          <MarkdownView content={message.content} compact headingOffset={2} />
         </div>
       </div>
     </div>
@@ -195,7 +195,7 @@ export function StreamingBubble({
               >
                 {stream.content ? (
                   <div className="relative">
-                    <MarkdownView content={stream.content} compact />
+                    <MarkdownView content={stream.content} compact headingOffset={2} />
                     {!blocker ? (
                       <span
                         aria-hidden

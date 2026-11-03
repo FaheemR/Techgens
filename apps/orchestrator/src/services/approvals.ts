@@ -3,6 +3,8 @@ import {
   APPROVAL_KINDS,
   DomainError,
   GATE_LABELS,
+  approvalDisplayTitle,
+  approvalHeadline,
   isGateEnabled,
   isOneOf,
   type ApprovalDetailDTO,
@@ -108,7 +110,7 @@ export class ApprovalService {
       actorId: input.requestedByAgentId ?? null,
       subjectType: "approval",
       subjectId: approval!.id,
-      summary: `${GATE_LABELS[input.kind]}: ${input.title}`,
+      summary: approvalHeadline(input.kind, input.title),
       data: { kind: input.kind, initiativeId: input.initiativeId ?? null, round: approval!.round },
     });
     await this.app.notifications.notify({
@@ -163,7 +165,7 @@ export class ApprovalService {
       await this.app.db.insert(schema.decisions).values({
         initiativeId: approval.initiativeId,
         type: actor === "system" ? "event" : "decision",
-        summary: `${actor === "ceo" ? "CEO" : "Policy"} ${input.outcome.replace("_", " ")}: ${GATE_LABELS[approval.kind]} — ${approval.title}`,
+        summary: `${actor === "ceo" ? "CEO" : "Policy"} ${input.outcome.replace("_", " ")}: ${approvalHeadline(approval.kind, approval.title)}`,
         details: comment,
         actorType: actor,
       });
@@ -184,7 +186,7 @@ export class ApprovalService {
       actorType: actor,
       subjectType: "approval",
       subjectId: id,
-      summary: `${GATE_LABELS[approval.kind]} ${input.outcome.replace("_", " ")}: ${approval.title}${grantNote ? ` — ${grantNote}` : ""}`,
+      summary: `${GATE_LABELS[approval.kind]} ${input.outcome.replace("_", " ")}: ${approvalDisplayTitle(approval.kind, approval.title)}${grantNote ? ` — ${grantNote}` : ""}`,
       data: {
         kind: approval.kind,
         outcome: input.outcome,
@@ -223,7 +225,7 @@ export class ApprovalService {
         actorType: "system",
         subjectType: "approval",
         subjectId: a.id,
-        summary: `${GATE_LABELS[a.kind]} withdrawn: ${a.title}`,
+        summary: `${GATE_LABELS[a.kind]} withdrawn: ${approvalDisplayTitle(a.kind, a.title)}`,
         data: {
           kind: a.kind,
           outcome: "withdrawn",

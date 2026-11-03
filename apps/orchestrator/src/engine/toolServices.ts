@@ -2,7 +2,7 @@ import { asc, eq, inArray, sql } from "drizzle-orm";
 import {
   DEFAULT_INITIATIVE_BUDGET_CREDITS,
   DomainError,
-  GATE_LABELS,
+  approvalHeadline,
   STAGES,
   formatCredits,
   truncate,
@@ -463,7 +463,7 @@ async function statusReport(app: Techgens, initiativeId: string | null): Promise
       `Pending approvals: ${
         d.approvals
           .filter((a) => a.status === "pending")
-          .map((a) => `${GATE_LABELS[a.kind]} — ${a.title}`)
+          .map((a) => approvalHeadline(a.kind, a.title))
           .join("; ") || "none"
       }`,
       `Milestones: ${d.milestones.map((m) => `${m.title}${m.dueDate ? ` (${m.dueDate.slice(0, 10)})` : ""}`).join("; ") || "none"}`,
@@ -497,7 +497,7 @@ async function statusReport(app: Techgens, initiativeId: string | null): Promise
             `- ${x.title} (id ${x.id}): ${x.status}${x.statusReason ? ` (${x.statusReason})` : ""}, stage ${x.stage}, work ${x.workItems.done}/${x.workItems.total}, spent ${formatCredits(x.spentCredits)}${x.budgetCredits ? ` of ${formatCredits(x.budgetCredits)}` : ""} credits`,
         )
       : ["- No initiatives yet."]),
-    `Pending CEO approvals: ${pending.map((a) => `${GATE_LABELS[a.kind]} — ${a.title}`).join("; ") || "none"}`,
+    `Pending CEO approvals: ${pending.map((a) => approvalHeadline(a.kind, a.title)).join("; ") || "none"}`,
     `Agent jobs: ${jobs.map((j) => `${j.n} ${j.status}`).join(", ") || "idle"}`,
     `AI credits: today ${formatCredits(usage.todayCredits)}, this month ${formatCredits(usage.monthCredits)}`,
   ].join("\n");

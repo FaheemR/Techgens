@@ -104,29 +104,8 @@ export function gateLabelLower(kind: ApprovalKind): string {
   return label.charAt(0).toLowerCase() + label.slice(1);
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * Approval titles often repeat the gate ("Vision & roadmap — InvoiceLite MVP", or "Vision & roadmap: Vision & roadmap — …"
- * in event summaries). Strips the repeated gate label so it can be shown next to a kind badge.
- */
-export function approvalDisplayTitle(kind: ApprovalKind, title: string): string {
-  const label = GATE_LABELS[kind];
-  if (!label) return title;
-  const prefix = new RegExp(`^\\s*${escapeRegExp(label)}\\s*(?:[:\\-–—|·]\\s*)+`, "i");
-  let text = title;
-  while (prefix.test(text)) text = text.replace(prefix, "");
-  return text.trim() || title;
-}
-
-/** "Vision & roadmap: InvoiceLite MVP" — one mention of the gate, for places without a kind badge. */
-export function approvalHeadline(kind: ApprovalKind, title: string): string {
-  const label = GATE_LABELS[kind] ?? kind;
-  const rest = approvalDisplayTitle(kind, title);
-  return rest.toLowerCase() === label.toLowerCase() ? label : `${label}: ${rest}`;
-}
+/** Strip a repeated gate label from approval titles; shared with the orchestrator's event summaries. */
+export { approvalDisplayTitle, approvalHeadline } from "@techgens/core";
 
 /** Gates that move an initiative to its next lifecycle stage (rejecting one pauses the initiative). */
 export const STAGE_GATE_KINDS: readonly ApprovalKind[] = [

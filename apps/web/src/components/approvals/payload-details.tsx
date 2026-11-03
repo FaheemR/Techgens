@@ -227,7 +227,8 @@ function renderValue(key: string, value: unknown): ReactNode {
   if (typeof value === "string") {
     if (isNumberKey(key)) return hashNumber(value);
     if (/(?:At|Date)$/.test(key) && Number.isFinite(Date.parse(value))) return formatDateTime(value);
-    if (value.includes("\n") || value.length > 160) return <MarkdownView content={value} compact />;
+    if (value.includes("\n") || value.length > 160)
+      return <MarkdownView content={value} compact headingOffset={3} />;
     return value;
   }
   if (Array.isArray(value) && value.every((v) => typeof v === "string" || typeof v === "number")) {
@@ -440,14 +441,14 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
   if (releaseNotes) {
     blocks.push(
       <Block key="notes" title="Release notes">
-        <MarkdownView content={releaseNotes} compact />
+        <MarkdownView content={releaseNotes} compact headingOffset={3} />
       </Block>,
     );
   }
   if (rollback) {
     blocks.push(
       <Block key="rollback" title="Rollback plan">
-        <MarkdownView content={rollback} compact />
+        <MarkdownView content={rollback} compact headingOffset={3} />
       </Block>,
     );
   }

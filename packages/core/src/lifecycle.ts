@@ -177,6 +177,30 @@ export const GATE_LABELS: Record<ApprovalKind, string> = {
   decision: "Decision",
 };
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Approval titles often repeat the gate ("Vision & roadmap — InvoiceLite MVP"). Strips the repeated gate label so the
+ * title can be shown next to a kind badge or after a "<gate>:" prefix.
+ */
+export function approvalDisplayTitle(kind: ApprovalKind, title: string): string {
+  const label = GATE_LABELS[kind];
+  if (!label) return title;
+  const prefix = new RegExp(`^\\s*${escapeRegExp(label)}\\s*(?:[:\\-–—|·]\\s*)+`, "i");
+  let text = title;
+  while (prefix.test(text)) text = text.replace(prefix, "");
+  return text.trim() || title;
+}
+
+/** "Vision & roadmap: InvoiceLite MVP" — one mention of the gate, for places without a kind badge. */
+export function approvalHeadline(kind: ApprovalKind, title: string): string {
+  const label = GATE_LABELS[kind] ?? kind;
+  const rest = approvalDisplayTitle(kind, title);
+  return rest.toLowerCase() === label.toLowerCase() ? label : `${label}: ${rest}`;
+}
+
 /** Gate policy: which gate kinds require the CEO. Disabled gates are auto-approved and logged. */
 export type GatePolicy = Partial<Record<ApprovalKind, boolean>>;
 export const DEFAULT_GATE_POLICY: Required<GatePolicy> = {

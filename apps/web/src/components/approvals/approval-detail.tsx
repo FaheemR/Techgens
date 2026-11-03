@@ -190,7 +190,7 @@ function ApprovalDetail({
                 Summary
               </h3>
               <div className="rounded-lg border border-border bg-surface-2/50 p-4">
-                <MarkdownView content={approval.summary} />
+                <MarkdownView content={approval.summary} headingOffset={3} />
               </div>
             </section>
           ) : null}
@@ -288,7 +288,7 @@ function AttachedDocuments({ documents }: { documents: DocumentDTO[] }) {
         </div>
         <div className="p-4 sm:p-5">
           {doc.content.trim() ? (
-            <MarkdownView content={doc.content} />
+            <MarkdownView content={doc.content} headingOffset={3} dropTitle={doc.title} />
           ) : (
             <p className="text-sm text-subtle">This document is empty.</p>
           )}

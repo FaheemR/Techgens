@@ -59,8 +59,10 @@ export function readOverrun(
     scopeName: asString(payload.scopeName) ?? budget?.scopeLabel ?? null,
     period,
     limitCredits:
-      budget?.limitCredits ??
-      asNumber(payload.limitCredits) ??
+      (budget ? budget.limitCredits + (budget.grantedCredits ?? 0) : undefined) ??
+      (asNumber(payload.limitCredits) !== undefined
+        ? asNumber(payload.limitCredits)! + (asNumber(payload.grantedCredits) ?? 0)
+        : undefined) ??
       fromSummary(/of\s+([\d.]+)\s+(?:AI\s+)?credits/i) ??
       null,
     spentCredits:
