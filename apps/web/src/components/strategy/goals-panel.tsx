@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import type { GoalDTO, GoalStatus, GoalType } from "@techgens/core";
 import { GOAL_STATUSES } from "@techgens/core";
 import { Check, CalendarDays, Pencil, Plus, Target, Trash2 } from "lucide-react";
+import { KeyResultWarning } from "@/components/common/key-result-warning";
 import { QueryView } from "@/components/common/query-view";
 import { GoalStatusBadge } from "@/components/common/status";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,7 @@ export function GoalsPanel() {
                           <h3 className="font-semibold">{objective.title}</h3>
                           <GoalStatusBadge status={objective.status} />
                         </div>
+                        <KeyResultWarning objective={objective} keyResults={keyResults} />
                         {objective.description ? (
                           <p className="mt-1 text-sm text-muted">{objective.description}</p>
                         ) : null}
@@ -201,7 +203,8 @@ export function GoalsPanel() {
             ? `“${deleting.title}” and its key results will be removed.`
             : `“${deleting?.title ?? ""}” will be removed.`
         }
-        confirmLabel="Delete"
+        confirmLabel={deleting?.type === "objective" ? "Delete objective" : "Delete key result"}
+        cancelLabel={deleting?.type === "objective" ? "Keep objective" : "Keep key result"}
       />
     </div>
   );
@@ -280,7 +283,7 @@ function KeyResultRow({ kr, onEdit, onDelete }: { kr: GoalDTO; onEdit: () => voi
               </button>
             )}
           </div>
-          {kr.dueDate ? <p className="mt-1 text-[11px] text-subtle">Due {formatDate(kr.dueDate)}</p> : null}
+          {kr.dueDate ? <p className="mt-1 text-xs text-subtle">Due {formatDate(kr.dueDate)}</p> : null}
         </div>
         <div className="flex shrink-0 gap-0.5">
           <Button variant="ghost" size="icon-sm" aria-label={`Edit key result ${kr.title}`} onClick={onEdit}>

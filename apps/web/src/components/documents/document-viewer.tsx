@@ -141,7 +141,7 @@ function DocumentBody({
                   {doc.initiativeId ? (
                     <Link
                       href={`/initiatives/${doc.initiativeId}`}
-                      className="inline-flex min-w-0 items-center gap-1 text-accent hover:underline"
+                      className="inline-flex min-w-0 max-w-full items-center gap-1 text-accent hover:underline"
                     >
                       <Rocket aria-hidden className="size-3.5 shrink-0" />
                       <span className="truncate">{doc.initiativeTitle ?? "Open initiative"}</span>
@@ -176,13 +176,13 @@ function DocumentBody({
                           <span className={cn("text-sm font-medium", active ? "text-accent" : "text-fg")}>
                             v{v.version}
                           </span>
-                          <span className="text-[11px] text-subtle">{relativeTime(v.createdAt, now)}</span>
+                          <span className="text-xs text-subtle">{relativeTime(v.createdAt, now)}</span>
                         </span>
                         <span className="mt-0.5 line-clamp-2 block text-xs text-muted">
                           {v.changeSummary || "No change summary"}
                         </span>
                         {v.authorName ? (
-                          <span className="block text-[11px] text-subtle">{v.authorName}</span>
+                          <span className="block text-xs text-subtle">{v.authorName}</span>
                         ) : null}
                       </button>
                     </li>

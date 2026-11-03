@@ -15,6 +15,21 @@ export function objectiveProgress(objective: GoalDTO, keyResults: readonly GoalD
   return goalProgress(objective);
 }
 
+/**
+ * Flags key results that contradict an "On track" objective, e.g. "1 key result at risk" or
+ * "2 key results off track, 1 at risk"; null when the statuses agree.
+ */
+export function keyResultWarning(objective: GoalDTO, keyResults: readonly GoalDTO[]): string | null {
+  if (objective.status !== "on_track") return null;
+  const off = keyResults.filter((k) => k.status === "off_track").length;
+  const risk = keyResults.filter((k) => k.status === "at_risk").length;
+  const count = (n: number) => `${n} key result${n === 1 ? "" : "s"}`;
+  if (off && risk) return `${count(off)} off track, ${risk} at risk`;
+  if (off) return `${count(off)} off track`;
+  if (risk) return `${count(risk)} at risk`;
+  return null;
+}
+
 export interface ObjectiveTree {
   objective: GoalDTO;
   keyResults: GoalDTO[];

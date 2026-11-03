@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { WorkItemDTO, WorkItemStatus } from "@techgens/core";
 import { Bot, Rocket } from "lucide-react";
 import { AgentAvatar } from "@/components/common/agent-avatar";
@@ -44,6 +44,28 @@ export function KanbanBoard({
   const [over, setOver] = useState<WorkItemStatus | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [allDone, setAllDone] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ start: false, end: false });
+
+  // Fade the edges that have more columns behind them, so an off-screen "Done" column is discoverable.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => {
+      const start = el.scrollLeft > 1;
+      const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+      setEdges((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, []);
 
   function onDrop(event: DragEvent<HTMLElement>, status: WorkItemStatus) {
     event.preventDefault();
@@ -55,86 +77,115 @@ export function KanbanBoard({
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-3" role="list" aria-label="Work board columns">
-      {columns.map((status) => {
-        const columnItems = items.filter((i) => i.status === status);
-        if (status === "done") columnItems.sort((a, b) => finishedAt(b) - finishedAt(a));
-        const collapsible = status === "done" && columnItems.length > DONE_PREVIEW;
-        const shown = collapsible && !allDone ? columnItems.slice(0, DONE_PREVIEW) : columnItems;
-        return (
-          <section
-            key={status}
-            role="listitem"
-            aria-label={`${WORK_STATUS_LABEL[status]} (${columnItems.length})`}
-            onDragOver={(event) => {
-              if (!dragging) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
-              if (over !== status) setOver(status);
-            }}
-            onDragLeave={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node | null)) setOver(null);
-            }}
-            onDrop={(event) => onDrop(event, status)}
-            className={cn(
-              "flex w-72 shrink-0 flex-col rounded-xl border bg-surface/70 transition-colors",
-              over === status ? "border-accent/60 bg-accent/[0.04]" : "border-border",
-            )}
-          >
-            <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-              <span aria-hidden className={cn("size-2 rounded-full", TONE_DOT[WORK_STATUS_TONE[status]])} />
-              <h2 className="text-sm font-semibold">{WORK_STATUS_LABEL[status]}</h2>
-              <span className="ml-auto rounded-full bg-white/5 px-2 text-xs tabular-nums text-muted">
-                {columnItems.length}
-              </span>
-            </header>
-            <ul className="flex max-h-[calc(100dvh-18rem)] min-h-24 flex-col gap-2 overflow-y-auto p-2">
-              {columnItems.length === 0 ? (
-                <li className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-subtle">
-                  {dragging ? "Drop here" : "Nothing here"}
-                </li>
-              ) : (
-                shown.map((item) => (
-                  <li key={item.id}>
-                    <WorkCard
-                      item={item}
-                      initiativeTitle={
-                        item.kind === "stage" && item.initiativeId
-                          ? initiativeTitles?.get(item.initiativeId)
-                          : undefined
-                      }
-                      onOpen={onOpen}
-                      dragging={dragging === item.id}
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData(DRAG_TYPE, item.id);
-                        event.dataTransfer.setData("text/plain", item.id);
-                        event.dataTransfer.effectAllowed = "move";
-                        setDragging(item.id);
-                      }}
-                      onDragEnd={() => {
-                        setDragging(null);
-                        setOver(null);
-                      }}
-                    />
-                  </li>
-                ))
-              )}
-            </ul>
-            {collapsible ? (
-              <div className="border-t border-border p-2">
-                <button
-                  type="button"
-                  onClick={() => setAllDone((v) => !v)}
-                  aria-expanded={allDone}
-                  className="w-full rounded-md px-2 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-white/5 hover:text-fg"
-                >
-                  {allDone ? `Show the ${DONE_PREVIEW} most recent` : `Show all ${columnItems.length}`}
-                </button>
-              </div>
-            ) : null}
-          </section>
-        );
-      })}
+    <div className="relative">
+      {/* Focusable so keyboard users can scroll the board with the arrow keys. */}
+      <div
+        ref={scrollRef}
+        role="region"
+        aria-label="Work board, scrolls sideways"
+        tabIndex={0}
+        className="overflow-x-auto rounded-xl pb-3"
+      >
+        <div className="flex w-max gap-3" role="list" aria-label="Work board columns">
+          {columns.map((status) => {
+            const columnItems = items.filter((i) => i.status === status);
+            if (status === "done") columnItems.sort((a, b) => finishedAt(b) - finishedAt(a));
+            const collapsible = status === "done" && columnItems.length > DONE_PREVIEW;
+            const shown = collapsible && !allDone ? columnItems.slice(0, DONE_PREVIEW) : columnItems;
+            return (
+              <section
+                key={status}
+                role="listitem"
+                aria-label={`${WORK_STATUS_LABEL[status]} (${columnItems.length})`}
+                onDragOver={(event) => {
+                  if (!dragging) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  if (over !== status) setOver(status);
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node | null))
+                    setOver(null);
+                }}
+                onDrop={(event) => onDrop(event, status)}
+                className={cn(
+                  "flex w-72 shrink-0 flex-col rounded-xl border bg-surface/70 transition-colors",
+                  over === status ? "border-accent/60 bg-accent/[0.04]" : "border-border",
+                )}
+              >
+                <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+                  <span
+                    aria-hidden
+                    className={cn("size-2 rounded-full", TONE_DOT[WORK_STATUS_TONE[status]])}
+                  />
+                  <h2 className="text-sm font-semibold">{WORK_STATUS_LABEL[status]}</h2>
+                  <span className="ml-auto rounded-full bg-white/5 px-2 text-xs tabular-nums text-muted">
+                    {columnItems.length}
+                  </span>
+                </header>
+                <ul className="flex max-h-[calc(100dvh-18rem)] min-h-24 flex-col gap-2 overflow-y-auto p-2">
+                  {columnItems.length === 0 ? (
+                    <li className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-subtle">
+                      {dragging ? "Drop here" : "Nothing here"}
+                    </li>
+                  ) : (
+                    shown.map((item) => (
+                      <li key={item.id}>
+                        <WorkCard
+                          item={item}
+                          initiativeTitle={
+                            item.kind === "stage" && item.initiativeId
+                              ? initiativeTitles?.get(item.initiativeId)
+                              : undefined
+                          }
+                          onOpen={onOpen}
+                          dragging={dragging === item.id}
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData(DRAG_TYPE, item.id);
+                            event.dataTransfer.setData("text/plain", item.id);
+                            event.dataTransfer.effectAllowed = "move";
+                            setDragging(item.id);
+                          }}
+                          onDragEnd={() => {
+                            setDragging(null);
+                            setOver(null);
+                          }}
+                        />
+                      </li>
+                    ))
+                  )}
+                </ul>
+                {collapsible ? (
+                  <div className="border-t border-border p-2">
+                    <button
+                      type="button"
+                      onClick={() => setAllDone((v) => !v)}
+                      aria-expanded={allDone}
+                      className="w-full rounded-md px-2 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-white/5 hover:text-fg"
+                    >
+                      {allDone ? `Show the ${DONE_PREVIEW} most recent` : `Show all ${columnItems.length}`}
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+            );
+          })}
+        </div>
+      </div>
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute bottom-3 left-0 top-0 w-12 bg-gradient-to-r from-bg to-transparent transition-opacity",
+          edges.start ? "opacity-100" : "opacity-0",
+        )}
+      />
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute bottom-3 right-0 top-0 w-12 bg-gradient-to-l from-bg to-transparent transition-opacity",
+          edges.end ? "opacity-100" : "opacity-0",
+        )}
+      />
     </div>
   );
 }
@@ -165,7 +216,7 @@ function WorkCard({
         item.status === "blocked" && "border-rose-400/30",
       )}
     >
-      <div className="flex items-center gap-1.5 text-[11px] text-subtle">
+      <div className="flex items-center gap-1.5 text-xs text-subtle">
         <WorkKindIcon kind={item.kind} />
         <span>{humanize(item.kind)}</span>
         {item.forCodingAgent ? (
@@ -189,7 +240,7 @@ function WorkCard({
       </h3>
       {initiativeTitle ? (
         // Stage cards share titles ("Intake: charter & roadmap"), so name the initiative they belong to.
-        <p className="mt-1.5 flex min-w-0 items-center gap-1 text-[11px] text-muted">
+        <p className="mt-1.5 flex min-w-0 items-center gap-1 text-xs text-muted">
           <Rocket aria-hidden className="size-3 shrink-0 text-subtle" />
           <span className="sr-only">Initiative:</span>
           <span className="truncate">{initiativeTitle}</span>

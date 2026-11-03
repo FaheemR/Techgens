@@ -105,6 +105,20 @@ export function ratio(value: number | null | undefined, total: number | null | u
   return value / total;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Who did something, for display: "CEO (you)", an agent's name (by id or name), or a humanised source. */
+export function actorName(
+  actor: string | null | undefined,
+  agentNames?: ReadonlyMap<string, string>,
+): string {
+  if (!actor) return "Unknown";
+  if (actor.toLowerCase() === "ceo") return "CEO (you)";
+  const name = agentNames?.get(actor);
+  if (name) return name;
+  return UUID.test(actor) ? "An agent" : humanize(actor);
+}
+
 /** "in_progress" → "In progress", "merge_to_main" → "Merge to main". */
 export function humanize(value: string | null | undefined): string {
   if (!value) return "";

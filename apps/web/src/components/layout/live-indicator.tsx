@@ -27,7 +27,8 @@ export function LiveIndicator() {
     <Link
       href="/activity"
       className={cn(
-        "group flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-colors",
+        // Below 400 px only the status dot remains (the name carries the state), leaving room for Demo and Pause.
+        "group flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-colors max-[399px]:px-2.5",
         open
           ? "border-emerald-400/25 bg-emerald-400/[0.06] text-emerald-200"
           : "border-amber-400/25 bg-amber-400/[0.06] text-amber-200",
@@ -56,10 +57,13 @@ export function LiveIndicator() {
           )}
         />
       </span>
-      <span>{LABELS[status]}</span>
+      <span className="max-[399px]:hidden">{LABELS[status]}</span>
       <Radio
         aria-hidden
-        className={cn("size-3.5 transition-opacity", recent ? "opacity-100" : "opacity-40")}
+        className={cn(
+          "size-3.5 transition-opacity max-[399px]:hidden",
+          recent ? "opacity-100" : "opacity-40",
+        )}
       />
     </Link>
   );
@@ -77,7 +81,7 @@ export function LiveTicker() {
       className="hidden min-w-0 animate-fade-in items-center gap-2 text-xs text-muted xl:flex"
       aria-live="off"
     >
-      <span className="font-mono text-[11px] text-subtle">{relativeTime(latest.createdAt, now)}</span>
+      <span className="font-mono text-xs text-subtle">{relativeTime(latest.createdAt, now)}</span>
       <span className="truncate">{eventSummary(latest)}</span>
     </p>
   );

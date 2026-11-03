@@ -157,7 +157,7 @@ export function NotificationsPopover() {
                           <span className={cn("text-sm", n.readAt ? "text-muted" : "font-medium text-fg")}>
                             {n.title}
                           </span>
-                          <time className="shrink-0 text-[11px] text-subtle" dateTime={n.createdAt}>
+                          <time className="shrink-0 text-xs text-subtle" dateTime={n.createdAt}>
                             {relativeTime(n.createdAt, now)}
                           </time>
                         </span>
@@ -165,7 +165,7 @@ export function NotificationsPopover() {
                           <span className="mt-0.5 line-clamp-2 block text-xs text-muted">{n.body}</span>
                         ) : null}
                         {n.link && !n.link.startsWith("/") ? (
-                          <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-accent">
+                          <span className="mt-1 inline-flex items-center gap-1 text-xs text-accent">
                             <ExternalLink aria-hidden className="size-3" /> Opens in a new tab
                           </span>
                         ) : null}

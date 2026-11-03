@@ -91,7 +91,7 @@ export function Tabs({
             {tab.count !== undefined ? (
               <span
                 className={cn(
-                  "rounded-full px-1.5 text-[11px] tabular-nums",
+                  "rounded-full px-1.5 text-xs tabular-nums",
                   selected ? "bg-accent/15 text-accent" : "bg-white/5 text-subtle",
                 )}
               >

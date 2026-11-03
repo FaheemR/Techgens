@@ -235,7 +235,8 @@ export function BudgetsEditor() {
             ? `${deleting.scopeLabel} · ${PERIOD_LABEL[deleting.period]} · ${credits(deleting.limitCredits)} credits`
             : undefined
         }
-        confirmLabel="Remove"
+        confirmLabel="Remove budget"
+        cancelLabel="Keep budget"
       />
     </Card>
   );
