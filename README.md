@@ -30,7 +30,7 @@ CEO ──▶ Command Center (Next.js) ──▶ Orchestrator (Fastify · Postgr
 touches no real repositories. All you need is Docker (or a GitHub Codespace).
 
 ```sh
-git clone https://github.com/FaheemR/techgens.git && cd techgens
+git clone https://github.com/FaheemR/Techgens.git && cd Techgens
 cp .env.example .env                  # then set AGENT_RUNTIME=fake in .env
 docker compose up -d --build          # first build: about 3–6 minutes
 ```

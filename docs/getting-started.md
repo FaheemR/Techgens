@@ -12,8 +12,8 @@ Requirements: [Docker Desktop](https://www.docker.com/products/docker-desktop/) 
 Git, about 4 GB of free disk and 4 GB of RAM for Docker.
 
 ```sh
-git clone https://github.com/FaheemR/techgens.git
-cd techgens
+git clone https://github.com/FaheemR/Techgens.git
+cd Techgens
 cp .env.example .env            # Windows PowerShell: Copy-Item .env.example .env
 ```
 
