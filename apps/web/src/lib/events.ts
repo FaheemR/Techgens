@@ -141,7 +141,7 @@ class LiveEventStore {
 
   private connect(): void {
     if (typeof window === "undefined" || typeof EventSource === "undefined") return;
-    const url = new URL(`${API_URL}/api/events/stream`);
+    const url = new URL(`${API_URL}/api/events/stream`, window.location.origin);
     if (this.lastSeq) url.searchParams.set("since", this.lastSeq);
     this.setSnapshot({ status: this.snapshot.connectionCount > 0 ? "reconnecting" : "connecting" });
 

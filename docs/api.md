@@ -1,6 +1,6 @@
 # Techgens orchestrator API
 
-Base URL: `http://localhost:4000` (env `NEXT_PUBLIC_API_URL` in the web app, inlined at build time). All routes are JSON under `/api`.
+Base URL: `http://localhost:3000/api/…` through the web app's same-origin proxy (forwards to `ORCHESTRATOR_URL`), or the orchestrator directly at `http://localhost:4000`. All routes are JSON under `/api`.
 Response types live in `packages/core/src/api.ts` (`*DTO`). Errors: non-2xx with `ApiErrorBody` `{ error, code? }`.
 
 ## System

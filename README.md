@@ -21,33 +21,33 @@ CEO ──▶ Command Center (Next.js) ──▶ Orchestrator (Fastify · Postgr
 
 ## Quick start
 
-Requirements: Docker. For real agents: a GitHub account with **Copilot** (Business/Enterprise recommended) and
-permission to create repositories in your org.
+**Try it first in demo mode**: the agents follow scripts and GitHub is simulated, so it spends no Copilot credits and
+touches no real repositories. All you need is Docker (or a GitHub Codespace).
 
 ```sh
-cp .env.example .env
-docker compose up -d --build
-open http://localhost:3000            # Command Center (API on http://localhost:4000)
+git clone https://github.com/FaheemR/techgens.git && cd techgens
+cp .env.example .env                  # then set AGENT_RUNTIME=fake in .env
+docker compose up -d --build          # first build: about 3–6 minutes
 ```
 
-1. **Settings → GitHub**: paste a fine-grained personal access token *owned by your user* with the **Copilot
+Open **http://localhost:3000**, give the Chief of Staff a directive (*"Build InvoiceLite: invoicing SaaS for
+freelancers. MVP in 6 weeks, budget 400 credits."*) and approve the gates as they arrive in **Approvals**.
+
+No Docker? Open the repository in **GitHub Codespaces** (Code → Codespaces), run
+`AGENT_RUNTIME=fake docker compose up -d --build` in its terminal and open port 3000 from the **Ports** tab.
+
+➡️ **[Getting started](docs/getting-started.md)**: a guided 10-minute tour, switching to real Copilot agents, and
+troubleshooting.
+
+### Real agents
+
+1. In `.env` set `AGENT_RUNTIME=copilot` (start fresh with `docker compose down -v`) and `docker compose up -d`.
+2. **Settings → GitHub**: paste a fine-grained personal access token *owned by your user* with the **Copilot
    Requests** account permission, plus repository permissions (Administration, Contents, Issues, Pull requests,
-   Actions, Environments, Variables, Workflows: read & write) on the org that will own product repositories — or
-   use **Create GitHub App** for a bot identity (`<app>[bot]`) and automatic token refresh.
-2. **Strategy**: set the company name, mission, values and the *policies* (the company "constitution" injected into
-   every agent prompt and every product repo as `.github/copilot-instructions.md`).
-3. **Directives**: tell the Chief of Staff what to build, e.g. *"Build InvoiceLite: invoicing SaaS for freelancers.
-   MVP in 6 weeks, budget 400 credits."* Approve gates in **Approvals** as they arrive.
-
-### Demo mode (no credits)
-
-```sh
-AGENT_RUNTIME=fake docker compose up -d --build
-```
-
-Agents follow deterministic scripts and GitHub is simulated in memory (Copilot PRs, CI, deployments), so you can
-explore the full lifecycle — directive → charter → PRD → architecture → backlog → PRs → release → production — for
-free.
+   Actions, Environments, Variables, Workflows: read & write) on the owner of product repositories — or use
+   **Create GitHub App** for a bot identity (`<app>[bot]`) and automatic token refresh.
+3. **Strategy**: set the company name, mission, values and the *policies* (the company "constitution" injected into
+   every agent prompt and every product repo as `.github/copilot-instructions.md`), then give your first directive.
 
 ## How it works
 
@@ -63,8 +63,9 @@ free.
 | Azure connection script generator | [`packages/azure`](packages/azure) |
 | REST/SSE API | [`docs/api.md`](docs/api.md) |
 
-More: [architecture](docs/architecture.md) · [CEO operating manual](docs/operating-manual.md) ·
-[GitHub, Copilot & Azure setup](docs/setup.md) · [authoring roles](docs/roles.md).
+More: [getting started](docs/getting-started.md) · [architecture](docs/architecture.md) ·
+[CEO operating manual](docs/operating-manual.md) · [GitHub, Copilot & Azure setup](docs/setup.md) ·
+[authoring roles](docs/roles.md) · [prior-art research](docs/research/prior-art.md).
 
 ## Development
 

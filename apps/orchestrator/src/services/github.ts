@@ -60,10 +60,12 @@ export class GitHubService {
     const tokens = await this.app.settings.getSecret(SECRET_USER_TOKENS);
     if (tokens && this.appCreds) {
       await this.useToken((await this.freshUserTokens(JSON.parse(tokens) as UserTokens)).accessToken).catch((err) => this.app.log.warn({ err: (err as Error).message }, "GitHub App user token invalid"));
-      return;
+    } else {
+      const pat = (await this.app.settings.getSecret(SECRET_PAT)) ?? this.app.config.githubToken;
+      if (pat) await this.connectToken(pat).catch((err) => this.app.log.warn({ err: (err as Error).message }, "stored GitHub token is invalid"));
     }
-    const pat = (await this.app.settings.getSecret(SECRET_PAT)) ?? this.app.config.githubToken;
-    if (pat) await this.connectToken(pat).catch((err) => this.app.log.warn({ err: (err as Error).message }, "stored GitHub token is invalid"));
+    // Leaving demo mode: don't keep showing the simulated GitHub identity.
+    if (!this.ceoPort && (await this.meta()).mode === "demo") await this.app.settings.set("github", { ...DEFAULT_SETTINGS.github });
   }
 
   private async useToken(token: string): Promise<{ login: string; id: number }> {

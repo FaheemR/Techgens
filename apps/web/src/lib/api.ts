@@ -1,7 +1,11 @@
 import type { ApiErrorBody } from "@techgens/core";
 
-/** Orchestrator base URL. The browser talks to it directly (CORS is enabled server-side). */
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/+$/, "");
+/**
+ * Orchestrator base URL as seen by the browser. Empty (the default) means same origin: requests go to this web app's
+ * `/api/*` route, which proxies them to the orchestrator (`ORCHESTRATOR_URL`, read server-side at runtime).
+ * Set `NEXT_PUBLIC_API_URL` at build time only to call an orchestrator directly (its CORS must allow this origin).
+ */
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
 
 export class ApiError extends Error {
   readonly status: number;
@@ -14,9 +18,9 @@ export class ApiError extends Error {
     this.code = code;
   }
 
-  /** True when the orchestrator could not be reached at all (network error, CORS, DNS…). */
+  /** True when the orchestrator could not be reached (network error, or the web app's proxy reporting it down). */
   get unreachable(): boolean {
-    return this.status === 0;
+    return this.status === 0 || this.code === "unreachable";
   }
 }
 
@@ -52,7 +56,7 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
     res = await fetch(`${API_URL}${path}`, init);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new ApiError(`Orchestrator unreachable at ${API_URL}`, 0, "unreachable");
+    throw new ApiError(API_URL ? `Orchestrator unreachable at ${API_URL}` : "Orchestrator unreachable", 0, "unreachable");
   }
 
   if (!res.ok) {

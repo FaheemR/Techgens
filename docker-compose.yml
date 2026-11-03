@@ -1,7 +1,7 @@
 # Techgens — local, single-user deployment.
-#   docker compose up -d --build          # Copilot-powered agents (connect GitHub in Settings)
-#   AGENT_RUNTIME=fake docker compose up   # demo mode: scripted agents + simulated GitHub, no AI credits
-# Ports are bound to 127.0.0.1 only: the API has no login and must not be exposed to a network.
+#   docker compose up -d --build                      # Copilot-powered agents (connect GitHub in Settings)
+#   AGENT_RUNTIME=fake docker compose up -d --build   # demo mode: scripted agents + simulated GitHub, no AI credits
+# Then open http://localhost:3000. Ports are bound to 127.0.0.1 only: there is no login, so never expose them.
 name: techgens
 
 services:
@@ -26,7 +26,8 @@ services:
       dockerfile: apps/orchestrator/Dockerfile
     environment:
       DATABASE_URL: postgres://techgens:techgens@postgres:5432/techgens
-      TECHGENS_PUBLIC_URL: ${TECHGENS_PUBLIC_URL:-http://localhost:4000}
+      # Public address of Techgens (the web app proxies /api/* to the orchestrator), used for GitHub callbacks.
+      TECHGENS_PUBLIC_URL: ${TECHGENS_PUBLIC_URL:-http://localhost:3000}
       TECHGENS_WEB_URL: ${TECHGENS_WEB_URL:-http://localhost:3000}
       TECHGENS_SECRET_KEY: ${TECHGENS_SECRET_KEY:-}
       AGENT_RUNTIME: ${AGENT_RUNTIME:-copilot}
@@ -47,8 +48,8 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${TECHGENS_PUBLIC_URL:-http://localhost:4000}
+    environment:
+      ORCHESTRATOR_URL: http://orchestrator:4000
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:

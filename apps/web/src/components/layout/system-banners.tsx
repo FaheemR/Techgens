@@ -39,11 +39,10 @@ export function SystemBanners() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
             <ServerCrash aria-hidden className="size-4 shrink-0 text-amber-300" />
             <p className="min-w-0 flex-1 text-amber-100">
-              <span className="font-semibold">Orchestrator unreachable at {API_URL}.</span>{" "}
+              <span className="font-semibold">Orchestrator unreachable{API_URL ? ` at ${API_URL}` : ""}.</span>{" "}
               <span className="text-amber-100/80">
-                Start it with <code className="rounded bg-black/30 px-1 font-mono text-xs">pnpm dev</code> (or
-                set <code className="rounded bg-black/30 px-1 font-mono text-xs">NEXT_PUBLIC_API_URL</code>).
-                Retrying automatically…
+                Start it with <code className="rounded bg-black/30 px-1 font-mono text-xs">docker compose up -d</code> or{" "}
+                <code className="rounded bg-black/30 px-1 font-mono text-xs">pnpm dev</code>. Retrying automatically…
               </span>
             </p>
             <Button

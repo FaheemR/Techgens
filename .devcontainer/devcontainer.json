@@ -1,0 +1,19 @@
+{
+  "name": "Techgens",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": { "label": "Techgens Command Center", "onAutoForward": "openBrowser" },
+    "4000": { "label": "Techgens API", "onAutoForward": "silent" },
+    "5432": { "label": "Postgres", "onAutoForward": "ignore" }
+  },
+  "postCreateCommand": "[ -f .env ] || cp .env.example .env",
+  "customizations": {
+    "codespaces": {
+      "openFiles": ["docs/getting-started.md"]
+    }
+  }
+}
