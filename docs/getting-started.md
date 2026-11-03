@@ -108,6 +108,8 @@ docker compose down -v              # remove containers and ALL data
 git pull && docker compose pull && docker compose up -d   # update to the latest version
 ```
 
+Updates keep your data: the orchestrator applies database migrations automatically when it starts.
+
 ## Troubleshooting
 
 | Symptom | Fix |

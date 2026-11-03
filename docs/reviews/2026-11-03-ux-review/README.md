@@ -12,6 +12,18 @@
 
 Screenshots referenced below are in this folder (`NN-*.webp`, `R*-*.webp` = responsive, `F*-*.webp` = finding evidence).
 
+> **Status.** This review covers v0.1 (`5159de0`).
+>
+> - The fixes were **re-tested by the same evaluator**: 19 findings fixed, 13 partially fixed, 5 open, no regressions; UX maturity rose from 3 to 3.5 (see the [re-test report](retest/README.md)).
+> - A follow-up round then fixed the re-test's new issues N1–N13 and most of the partial items: F11, F12, F16, F18, F21, F25, F26, F27, F31 and F36. F12's root cause was toasts sitting over the decision buttons. Automated tests and headless browser checks verify this round; the evaluator has not re-scored it yet.
+> - **Still open:**
+>   - F19: a "Needs attention" dashboard.
+>   - F20: retiring agents.
+>   - F28: entity links and thread management in chat.
+>   - F35: truncated document titles.
+>   - F37: an onboarding checklist and key-result baselines.
+>   - The rest of F01: risk and recommendation blocks, and richer vision/PRD briefs.
+
 ---
 
 ## 1. Executive summary
