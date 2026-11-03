@@ -32,7 +32,7 @@ export function invalidationRoots(type: string): string[] {
   if (type === "agent.message_delta") return [];
   if (type.startsWith("approval.")) return ["approvals", "dashboard", "initiatives", "notifications"];
   if (type.startsWith("job.")) return ["jobs", "org", "agents", "dashboard", "work-items"];
-  if (type.startsWith("initiative.")) return ["initiatives", "dashboard"];
+  if (type.startsWith("initiative.")) return ["initiatives", "dashboard", "notifications"];
   if (type.startsWith("work_item.")) return ["work-items", "initiatives"];
   if (type === "document.written") return ["documents", "initiatives", "approvals"];
   if (type === "decision.recorded") return ["decisions", "initiatives"];

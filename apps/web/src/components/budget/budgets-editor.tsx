@@ -61,7 +61,8 @@ export function useUpsertBudgets(onSuccess?: () => void) {
   return useApiMutation((items: BudgetUpsert[]) => api.put<BudgetDTO[]>("/api/budgets", items), {
     success: "Budget saved",
     errorTitle: "Couldn't save the budget",
-    invalidate: [["usage"], qk.dashboard, qk.org],
+    // Initiative budgets are the same record as initiative-scope total budgets, so their cards change too.
+    invalidate: [["usage"], qk.dashboard, qk.org, ["initiatives"]],
     onSuccess: () => {
       // The response may contain only the upserted rows, so refetch the full list instead of replacing it.
       void queryClient.invalidateQueries({ queryKey: qk.budgets });
@@ -80,7 +81,7 @@ export function BudgetsEditor() {
   const remove = useApiMutation((id: string) => api.del(`/api/budgets/${id}`), {
     success: "Budget removed",
     errorTitle: "Couldn't remove the budget",
-    invalidate: [qk.budgets, ["usage"], qk.dashboard],
+    invalidate: [qk.budgets, ["usage"], qk.dashboard, ["initiatives"]],
     onSuccess: () => setDeleting(null),
   });
 
