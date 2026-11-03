@@ -72,9 +72,12 @@ export function periodEnd(period: BudgetPeriod, now: Date = new Date()): Date | 
 /** Cap applied to agent-created initiatives when the CEO's directive names no budget. */
 export const DEFAULT_INITIATIVE_BUDGET_CREDITS = 100;
 
+const CREDIT_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+
+/** Human-readable credits: "3,000", "12.5", "0.07", "< 0.01" (same convention as the web UI). */
 export function formatCredits(credits: number): string {
-  if (credits === 0) return "0";
-  if (Math.abs(credits) < 0.01) return credits.toFixed(4);
-  if (Math.abs(credits) < 10) return credits.toFixed(2);
-  return credits.toFixed(1);
+  if (!Number.isFinite(credits)) return "—";
+  if (credits > 0 && credits < 0.005) return "< 0.01";
+  const text = CREDIT_FORMAT.format(credits);
+  return text === "-0" ? "0" : text;
 }

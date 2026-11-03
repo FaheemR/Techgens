@@ -17,7 +17,7 @@ import { SkeletonRows } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { credits, humanize } from "@/lib/format";
+import { credits, formatDateTime, humanize } from "@/lib/format";
 import { departmentStyle } from "@/lib/labels";
 import { useApiMutation } from "@/lib/mutations";
 import { qk, useBudgets, useInitiatives, useOrg, useProducts } from "@/lib/queries";
@@ -143,13 +143,24 @@ export function BudgetsEditor() {
                         </div>
                       </TD>
                       <TD className="text-muted">{PERIOD_LABEL[budget.period]}</TD>
-                      <TD className="text-right tabular-nums">{credits(budget.limitCredits)}</TD>
+                      <TD className="text-right tabular-nums">
+                        {credits(budget.limitCredits)}
+                        {budget.grantedCredits > 0 ? (
+                          <span
+                            className="block text-xs text-amber-200"
+                            title={`One-off grant for the current window${budget.windowEndsAt ? `, expires ${formatDateTime(budget.windowEndsAt)}` : ""}`}
+                          >
+                            + {credits(budget.grantedCredits)} granted
+                            {budget.windowEndsAt ? ` until ${formatDateTime(budget.windowEndsAt)}` : ""}
+                          </span>
+                        ) : null}
+                      </TD>
                       <TD className="text-right tabular-nums text-muted">{budget.warnPct}%</TD>
                       <TD>
                         <div className="flex items-center gap-2">
                           <Progress
                             value={budget.spentCredits}
-                            max={budget.limitCredits}
+                            max={budget.limitCredits + budget.grantedCredits}
                             warnAt={budget.warnPct / 100}
                             label={`${budgetName(budget)} used`}
                             size="sm"

@@ -71,6 +71,10 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
   const monthBudget = data.budgets.find((b) => b.scope === "company" && b.period === "month" && b.enabled);
   const dayBudget = data.budgets.find((b) => b.scope === "company" && b.period === "day" && b.enabled);
   const weekBudget = data.budgets.find((b) => b.scope === "company" && b.period === "week" && b.enabled);
+  // Effective limit for the current window: base limit plus any one-off grant the CEO approved.
+  const limitOf = (b: UsageSummaryDTO["budgets"][number]) => b.limitCredits + b.grantedCredits;
+  const limitText = (b: UsageSummaryDTO["budgets"][number], period: string, spent: number) =>
+    `of ${credits(limitOf(b))} ${period} budget${b.grantedCredits > 0 ? ` (incl. ${credits(b.grantedCredits)} granted)` : ""} · ${percent(spent / limitOf(b))}`;
   const daily = fillDays(data.daily, days);
   const rangeTotal = daily.reduce((sum, d) => sum + d.credits, 0);
 
@@ -80,18 +84,14 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
         <KpiCard
           label="Credits today"
           value={credits(data.todayCredits)}
-          sub={
-            dayBudget
-              ? `of ${credits(dayBudget.limitCredits)} daily budget · ${percent(data.todayCredits / dayBudget.limitCredits)}`
-              : "No daily company budget"
-          }
+          sub={dayBudget ? limitText(dayBudget, "daily", data.todayCredits) : "No daily company budget"}
           icon={Coins}
-          tone={dayBudget && data.todayCredits >= dayBudget.limitCredits ? "danger" : "accent"}
+          tone={dayBudget && data.todayCredits >= limitOf(dayBudget) ? "danger" : "accent"}
         >
           {dayBudget ? (
             <Progress
               value={data.todayCredits}
-              max={dayBudget.limitCredits}
+              max={limitOf(dayBudget)}
               warnAt={dayBudget.warnPct / 100}
               label="Daily budget used"
               size="sm"
@@ -101,17 +101,13 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
         <KpiCard
           label="Credits this week"
           value={credits(data.weekCredits)}
-          sub={
-            weekBudget
-              ? `of ${credits(weekBudget.limitCredits)} weekly budget · ${percent(data.weekCredits / weekBudget.limitCredits)}`
-              : "No weekly company budget"
-          }
+          sub={weekBudget ? limitText(weekBudget, "weekly", data.weekCredits) : "No weekly company budget"}
           icon={CalendarDays}
         >
           {weekBudget ? (
             <Progress
               value={data.weekCredits}
-              max={weekBudget.limitCredits}
+              max={limitOf(weekBudget)}
               warnAt={weekBudget.warnPct / 100}
               label="Weekly budget used"
               size="sm"
@@ -122,17 +118,15 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
           label="Credits this month"
           value={credits(data.monthCredits)}
           sub={
-            monthBudget
-              ? `of ${credits(monthBudget.limitCredits)} monthly budget · ${percent(data.monthCredits / monthBudget.limitCredits)}`
-              : "No monthly company budget"
+            monthBudget ? limitText(monthBudget, "monthly", data.monthCredits) : "No monthly company budget"
           }
           icon={Wallet}
-          tone={monthBudget && data.monthCredits >= monthBudget.limitCredits ? "danger" : "accent"}
+          tone={monthBudget && data.monthCredits >= limitOf(monthBudget) ? "danger" : "accent"}
         >
           {monthBudget ? (
             <Progress
               value={data.monthCredits}
-              max={monthBudget.limitCredits}
+              max={limitOf(monthBudget)}
               warnAt={monthBudget.warnPct / 100}
               label="Monthly budget used"
               size="sm"
@@ -163,7 +157,7 @@ function UsageContent({ data, days, fetching }: { data: UsageSummaryDTO; days: n
               description="Usage appears as soon as agents run jobs."
             />
           ) : (
-            <SpendChart daily={daily} dailyLimit={dayBudget?.limitCredits ?? null} />
+            <SpendChart daily={daily} dailyLimit={dayBudget ? limitOf(dayBudget) : null} />
           )}
         </CardContent>
       </Card>

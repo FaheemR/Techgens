@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray, or, sql, type SQL } from "drizzle-orm";
 import {
   creditsToNano,
   evaluateBudget,
+  formatCredits,
   nanoToCredits,
   periodEnd,
   periodStart,
@@ -30,11 +31,9 @@ export interface UsageInput {
 
 const l = schema.usageLedger;
 
-/** Credits for people: "10", "0.5", "0.0035". */
+/** Credits for people: "3,000", "0.5", "< 0.01". */
 export function fmtCredits(credits: number): string {
-  return Math.abs(credits) >= 0.01 || credits === 0
-    ? String(Number(credits.toFixed(2)))
-    : credits.toPrecision(2);
+  return formatCredits(credits);
 }
 
 const WINDOW_NAMES: Record<BudgetPeriod, string> = {
@@ -91,7 +90,7 @@ export class BudgetService {
       actorId: input.agentId,
       subjectType: "job",
       subjectId: input.jobId,
-      summary: `${nanoToCredits(input.nanoAiu).toFixed(4)} credits on ${input.model ?? "model"}`,
+      summary: `${formatCredits(nanoToCredits(input.nanoAiu))} credits on ${input.model ?? "model"}`,
       data: { nanoAiu: input.nanoAiu, model: input.model, initiativeId: input.initiativeId },
     });
   }
