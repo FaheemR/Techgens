@@ -124,17 +124,19 @@ export async function runJobTurns(engine: JobEngine, job: Job, agent: Agent, rol
   if (session.sessionId !== job.sessionId) await app.db.update(schema.jobs).set({ sessionId: session.sessionId }).where(eq(schema.jobs.id, job.id));
   if (thread && thread.sessionId !== session.sessionId) await app.chat.setThreadSession(thread.id, session.sessionId);
 
-  const message = job.resumeMessage
-    ? fresh && job.sessionId
+  // A fresh session never saw the assignment: it gets the prompt plus the pending update.
+  const message = !job.resumeMessage
+    ? job.prompt
+    : fresh
       ? `${job.prompt}\n\n## Update since you last worked on this\n${job.resumeMessage}`
-      : job.resumeMessage
-    : job.prompt;
-  if (job.resumeMessage) await app.db.update(schema.jobs).set({ resumeMessage: null }).where(eq(schema.jobs.id, job.id));
+      : job.resumeMessage;
 
   let lastMessage = "";
   try {
     for (let turn = 0; turn < 2; turn++) {
       const res = await session.run(turn === 0 ? message : NUDGE_MESSAGE, { timeoutMs: app.config.turnTimeoutMs, signal });
+      // Delivered: cleared only now, so a failed or interrupted turn is retried with the same update (e.g. an approval).
+      if (turn === 0 && job.resumeMessage) await app.db.update(schema.jobs).set({ resumeMessage: null }).where(eq(schema.jobs.id, job.id));
       await Promise.allSettled(pending.splice(0));
       if (res.finalMessage) lastMessage = res.finalMessage;
       if (signal.aborted) return;

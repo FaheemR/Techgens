@@ -30,23 +30,32 @@ export interface UsageInput {
 }
 
 const l = schema.usageLedger;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Credits for people: "3,000", "0.5", "< 0.01". */
 export function fmtCredits(credits: number): string {
   return formatCredits(credits);
 }
 
-const WINDOW_NAMES: Record<BudgetPeriod, string> = {
-  day: "today",
-  week: "this week",
-  month: "this month",
-  total: "the total budget",
-};
+/**
+ * When a grant on a budget expires, for people: "00:00 UTC" (daily window), "Mon 9 Nov, 00:00 UTC" (weekly/monthly),
+ * or null for total budgets (a grant adds to the total for good).
+ */
+export function windowEndText(period: BudgetPeriod, windowEndsAt: Date | string | null): string | null {
+  if (period === "total" || !windowEndsAt) return null;
+  const end = new Date(windowEndsAt);
+  const time = `${String(end.getUTCHours()).padStart(2, "0")}:${String(end.getUTCMinutes()).padStart(2, "0")} UTC`;
+  if (period === "day") return time;
+  const day = end.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  return `${day}, ${time}`;
+}
 
-/** "for today (until 2026-11-04 00:00 UTC)" / "on top of the total budget": how long a grant on a budget lasts. */
-export function grantWindow(period: BudgetPeriod, windowEndsAt: Date | string | null): string {
-  if (period === "total" || !windowEndsAt) return "on top of the total budget";
-  return `for ${WINDOW_NAMES[period]} (until ${new Date(windowEndsAt).toISOString().slice(0, 16).replace("T", " ")} UTC)`;
+/** "Granted 10 credits until 00:00 UTC." — the decision note of a budget grant. */
+export function grantNote(credits: number, period: BudgetPeriod | null, windowEndsAt: Date | string | null): string {
+  const amount = `${fmtCredits(credits)} ${credits === 1 ? "credit" : "credits"}`;
+  if (!period) return `Granted ${amount}.`;
+  const end = windowEndText(period, windowEndsAt);
+  return end ? `Granted ${amount} until ${end}.` : `Granted ${amount} on top of the total budget.`;
 }
 
 export class BudgetService {
@@ -158,13 +167,12 @@ export class BudgetService {
     return (await this.labels()).get(`${scope}:${scopeId}`) ?? scopeId;
   }
 
-  /** Decision note for a grant on `budgetId`, e.g. "Granted 10 extra credits for today (until 2026-11-04 00:00 UTC)." */
+  /** Decision note for a grant on `budgetId`, e.g. "Granted 10 credits until 00:00 UTC." */
   async describeGrant(budgetId: string | null, credits: number, now: Date = new Date()): Promise<string> {
     const [b] = budgetId
       ? await this.app.db.select().from(schema.budgets).where(eq(schema.budgets.id, budgetId))
       : [];
-    const amount = `${fmtCredits(credits)} extra credit${credits === 1 ? "" : "s"}`;
-    return b ? `Granted ${amount} ${grantWindow(b.period, periodEnd(b.period, now))}.` : `Granted ${amount}.`;
+    return b ? grantNote(credits, b.period, periodEnd(b.period, now)) : grantNote(credits, null, null);
   }
 
   /** Budgets that constrain a job of `agent` (company, department, agent, initiative, product). */
@@ -321,12 +329,92 @@ export class BudgetService {
           target: [schema.budgets.scope, schema.budgets.scopeId, schema.budgets.period],
           set: { ...values, updatedAt: new Date() },
         });
+      if (values.scope === "initiative" && values.period === "total") await this.syncInitiativeCap(values.scopeId);
     }
     return this.listBudgets();
   }
 
   async deleteBudget(id: string): Promise<void> {
-    await this.app.db.delete(schema.budgets).where(eq(schema.budgets.id, id));
+    const [row] = await this.app.db.delete(schema.budgets).where(eq(schema.budgets.id, id)).returning();
+    if (row?.scope === "initiative" && row.period === "total" && row.scopeId) await this.syncInitiativeCap(row.scopeId);
+  }
+
+  /** The initiative's own total budget: its cap. */
+  async initiativeCap(initiativeId: string): Promise<Budget | null> {
+    const [row] = await this.app.db
+      .select()
+      .from(schema.budgets)
+      .where(
+        and(
+          eq(schema.budgets.scope, "initiative"),
+          eq(schema.budgets.scopeId, initiativeId),
+          eq(schema.budgets.period, "total"),
+        ),
+      );
+    return row ?? null;
+  }
+
+  /** Per initiative: the enforced base limit of its total budget (null when none or disabled) and the grants on it. */
+  async initiativeCaps(initiativeIds: string[]): Promise<Map<string, { limitCredits: number | null; grantedCredits: number }>> {
+    if (!initiativeIds.length) return new Map();
+    const rows = await this.app.db
+      .select()
+      .from(schema.budgets)
+      .where(
+        and(
+          eq(schema.budgets.scope, "initiative"),
+          eq(schema.budgets.period, "total"),
+          inArray(schema.budgets.scopeId, initiativeIds),
+        ),
+      );
+    const grants = rows.length
+      ? await this.app.db
+          .select({ budgetId: schema.budgetAlerts.budgetId, extra: sql<string>`sum(${schema.budgetAlerts.extraCredits})` })
+          .from(schema.budgetAlerts)
+          .where(
+            and(
+              inArray(
+                schema.budgetAlerts.budgetId,
+                rows.map((r) => r.id),
+              ),
+              // A total budget has one window, so its grants never expire.
+              eq(schema.budgetAlerts.periodStart, periodStart("total")),
+            ),
+          )
+          .groupBy(schema.budgetAlerts.budgetId)
+      : [];
+    const granted = new Map(grants.map((g) => [g.budgetId, Number(g.extra)]));
+    return new Map(
+      rows.map((r) => [
+        r.scopeId!,
+        { limitCredits: r.enabled ? r.limitCredits : null, grantedCredits: r.enabled ? (granted.get(r.id) ?? 0) : 0 },
+      ]),
+    );
+  }
+
+  /** Keeps `initiatives.budget_credits` equal to the enforced base limit of the initiative's total budget. */
+  private async syncInitiativeCap(initiativeId: string | null): Promise<void> {
+    if (!initiativeId || !UUID.test(initiativeId)) return;
+    const cap = await this.initiativeCap(initiativeId);
+    const limit = cap?.enabled ? cap.limitCredits : null;
+    const [row] = await this.app.db
+      .update(schema.initiatives)
+      .set({ budgetCredits: limit, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.initiatives.id, initiativeId),
+          sql`${schema.initiatives.budgetCredits} is distinct from ${limit}::double precision`,
+        ),
+      )
+      .returning();
+    if (!row) return;
+    await this.app.bus.emit({
+      type: "initiative.updated",
+      subjectType: "initiative",
+      subjectId: row.id,
+      summary: limit === null ? `${row.title}: budget cap removed` : `${row.title}: budget cap set to ${fmtCredits(limit)} credits`,
+      data: { budgetCredits: limit },
+    });
   }
 
   async summary(days = 30): Promise<UsageSummaryDTO> {

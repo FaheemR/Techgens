@@ -99,6 +99,8 @@ export const collaborationTools: Record<string, Factory> = {
       }),
       handler: async (i) => {
         const r = await s.requestApproval(c, { ...i, kind: i.kind as never });
+        if (r.alreadyApproved)
+          return `The CEO already approved this gate for the current stage (approval ${r.approvalId}); it was not requested again. Don't redo the approved work: finish your assignment and call complete_task.`;
         return r.autoApproved
           ? `Approved automatically by the CEO's gate policy (approval ${r.approvalId}).`
           : `Approval ${r.approvalId} requested from the CEO. Your turn ends now.`;

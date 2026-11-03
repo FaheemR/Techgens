@@ -69,6 +69,19 @@ export class NotificationService {
     return rows.length;
   }
 
+  /**
+   * Marks the notices about an initiative (paused, blocked, escalations: links to `/initiatives/<id>`) as read once they
+   * are stale — the initiative was resumed, cancelled or completed. Returns how many changed.
+   */
+  async markInitiativeRead(initiativeId: string): Promise<number> {
+    const rows = await this.app.db
+      .update(schema.notifications)
+      .set({ readAt: new Date() })
+      .where(and(isNull(schema.notifications.readAt), eq(schema.notifications.link, `/initiatives/${initiativeId}`)))
+      .returning({ id: schema.notifications.id });
+    return rows.length;
+  }
+
   async markAllRead(): Promise<void> {
     await this.app.db
       .update(schema.notifications)

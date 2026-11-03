@@ -84,7 +84,7 @@ export function registerCompanyRoutes(server: FastifyInstance, app: Techgens): v
   });
   server.get("/api/initiatives/:id", async (req) => app.lifecycle.detail(parse(id, req.params).id));
   server.patch("/api/initiatives/:id", async (req) => {
-    const body = parse(z.object({ title: z.string().optional(), summary: z.string().optional(), targetDate: z.string().nullable().optional(), budgetCredits: z.number().nullable().optional() }), req.body);
+    const body = parse(z.object({ title: z.string().optional(), summary: z.string().optional(), targetDate: z.string().nullable().optional(), budgetCredits: z.number().positive().nullable().optional() }), req.body);
     await app.lifecycle.update(parse(id, req.params).id, body);
     return app.lifecycle.detail(parse(id, req.params).id);
   });

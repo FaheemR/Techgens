@@ -104,7 +104,10 @@ export interface InitiativeSummaryDTO {
   productId: string | null;
   productName: string | null;
   targetDate: string | null;
+  /** Enforced base limit of the initiative's total budget (the Budget page edits the same record); null = no cap. */
   budgetCredits: number | null;
+  /** Extra credits the CEO granted on that budget (overrun approvals): show "400 + 10 granted". */
+  grantedCredits: number;
   spentCredits: number;
   /** Counts every work item listed for the initiative (stage items included), by status. */
   workItems: { total: number; done: number; inProgress: number; blocked: number; cancelled: number };
@@ -342,8 +345,11 @@ export interface BudgetOverrunPayload {
 export interface DecideApprovalRequest {
   outcome: ApprovalOutcome;
   comment?: string;
-  /** For budget_overrun approvals: extra credits granted for the current window (default: `suggestedExtraCredits`). */
-  extraCredits?: number;
+  /**
+   * For budget_overrun approvals: extra credits granted for the current window. A number or numeric string (decimals
+   * allowed) always wins; only when omitted is `suggestedExtraCredits` granted.
+   */
+  extraCredits?: number | string;
 }
 
 export interface BudgetDTO {

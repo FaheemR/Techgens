@@ -72,7 +72,8 @@ export function registerWorkRoutes(server: FastifyInstance, app: Techgens): void
   });
   server.get("/api/approvals/:id", async (req) => app.approvals.detail(parse(id, req.params).id));
   server.post("/api/approvals/:id/decide", async (req) => {
-    const body = parse(z.object({ outcome: z.enum(APPROVAL_OUTCOMES), comment: z.string().optional(), extraCredits: z.number().positive().optional() }), req.body);
+    // extraCredits may arrive as a number or a numeric string; the service validates it (an explicit amount always wins).
+    const body = parse(z.object({ outcome: z.enum(APPROVAL_OUTCOMES), comment: z.string().optional(), extraCredits: z.union([z.number(), z.string()]).nullable().optional() }), req.body);
     const approvalId = parse(id, req.params).id;
     await app.approvals.decide(approvalId, body, "ceo");
     return app.approvals.detail(approvalId);
