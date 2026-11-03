@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import type { MessageDTO, ThreadDTO } from "@techgens/core";
+import type { AgentDTO, MessageDTO, ThreadDTO } from "@techgens/core";
 import { Lightbulb, MessageSquarePlus, MessagesSquare, Sparkles } from "lucide-react";
 import { AgentAvatar } from "@/components/common/agent-avatar";
 import { QueryView } from "@/components/common/query-view";
+import { usePauseMutation } from "@/components/layout/pause-toggle";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -17,10 +18,20 @@ import { api, errorMessage } from "@/lib/api";
 import { eventJobId, eventString, useLiveEventListener } from "@/lib/events";
 import { relativeTime } from "@/lib/format";
 import { useNow, useQueryParams } from "@/lib/hooks";
-import { qk, useMessages, useOrg, useThreads } from "@/lib/queries";
+import { approvalHeadline } from "@/lib/labels";
+import {
+  qk,
+  useApproval,
+  useJobDetail,
+  useMessages,
+  useOrg,
+  useSystem,
+  useThreads,
+  type JobDetail,
+} from "@/lib/queries";
 import { cn, sortByDateDesc } from "@/lib/utils";
 import { Composer } from "./composer";
-import { MessageBubble, StreamingBubble, type StreamState } from "./message-list";
+import { MessageBubble, StreamingBubble, type ReplyBlocker, type StreamState } from "./message-list";
 
 const STARTER_PROMPTS = [
   "Build InvoiceLite: invoicing SaaS for freelancers, MVP in 6 weeks, budget 400 credits/week",
@@ -28,6 +39,32 @@ const STARTER_PROMPTS = [
   "Research the market for an AI meeting-notes app for small teams and recommend whether we should build it",
   "Draft our engineering standards and security policies for the company constitution",
 ];
+
+/** A reply blocker before the blocking approval's title is known. */
+type BlockerFacts =
+  | Exclude<ReplyBlocker, { kind: "approval" }>
+  | { kind: "approval"; approvalId: string | null; budget: boolean };
+
+/**
+ * What the reply is blocked on, from the global kill switch, the Chief of Staff's own status and the reply job
+ * (a budget overrun or gate leaves it `waiting` with waitReason "approval"; its `job.waiting` event names the approval).
+ */
+function replyBlocker(
+  job: JobDetail | undefined,
+  paused: boolean,
+  chief: AgentDTO | undefined,
+): BlockerFacts | null {
+  if (paused) return { kind: "paused" };
+  if (job && (job.status === "queued" || job.status === "waiting") && chief?.status === "paused") {
+    return { kind: "agent-paused", agentName: chief.name };
+  }
+  if (job?.status !== "waiting" || (job.waitReason !== "approval" && job.waitReason !== "budget"))
+    return null;
+  const waiting = [...(job.events ?? [])].reverse().find((event) => event.type === "job.waiting");
+  const approvalId = waiting && typeof waiting.data.approvalId === "string" ? waiting.data.approvalId : null;
+  const budget = job.waitReason === "budget" || /budget/i.test(waiting?.summary ?? "");
+  return { kind: "approval", approvalId, budget };
+}
 
 function deriveTitle(content: string): string {
   const firstLine = content.split("\n")[0]?.trim() ?? "New directive";
@@ -197,6 +234,22 @@ export function ChatView() {
   const activeThread = threadList.find((t) => t.id === threadId);
   const visibleStream = stream && stream.threadId === threadId ? stream : null;
 
+  const system = useSystem();
+  const paused = Boolean(system.data?.paused);
+  const resume = usePauseMutation();
+  const replyJob = useJobDetail(visibleStream && !visibleStream.error ? visibleStream.jobId : null);
+  const facts = visibleStream && !visibleStream.error ? replyBlocker(replyJob.data, paused, chief) : null;
+  const blockingApproval = useApproval(facts?.kind === "approval" ? facts.approvalId : null);
+  const blocker: ReplyBlocker | null =
+    facts?.kind === "approval"
+      ? {
+          ...facts,
+          title: blockingApproval.data
+            ? approvalHeadline(blockingApproval.data.kind, blockingApproval.data.title)
+            : null,
+        }
+      : facts;
+
   return (
     <div className="flex h-[calc(100dvh-7.5rem)] min-h-[520px] gap-4">
       <Card className="hidden w-72 shrink-0 flex-col overflow-hidden lg:flex">
@@ -310,7 +363,15 @@ export function ChatView() {
                     {list.map((message) => (
                       <MessageBubble key={message.id} message={message} chief={chief} now={now} />
                     ))}
-                    {visibleStream ? <StreamingBubble stream={visibleStream} chief={chief} /> : null}
+                    {visibleStream ? (
+                      <StreamingBubble
+                        stream={visibleStream}
+                        chief={chief}
+                        blocker={blocker}
+                        onResume={() => resume.mutate(false)}
+                        resuming={resume.isPending}
+                      />
+                    ) : null}
                   </div>
                 )
               }
@@ -324,6 +385,8 @@ export function ChatView() {
           onSend={send}
           textareaRef={textareaRef}
           busy={Boolean(visibleStream && !visibleStream.error)}
+          paused={paused}
+          waitingOnCeo={blocker?.kind === "approval"}
         />
       </Card>
     </div>

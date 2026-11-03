@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type KeyboardEvent, type Ref } from "react";
-import { SendHorizontal } from "lucide-react";
+import { OctagonPause, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +11,8 @@ export function Composer({
   onSend,
   disabled,
   busy,
+  paused = false,
+  waitingOnCeo = false,
   placeholder = "Give the Chief of Staff a directive…",
   textareaRef,
 }: {
@@ -19,6 +21,10 @@ export function Composer({
   onSend: (content: string) => Promise<void>;
   disabled?: boolean;
   busy?: boolean;
+  /** All agents are paused (global kill switch): directives are accepted but queue until resumed. */
+  paused?: boolean;
+  /** The current reply is blocked on a CEO decision. */
+  waitingOnCeo?: boolean;
   placeholder?: string;
   textareaRef?: Ref<HTMLTextAreaElement>;
 }) {
@@ -86,10 +92,20 @@ export function Composer({
           {sending ? null : <SendHorizontal />}
         </Button>
       </div>
+      {paused ? (
+        <p className="mt-1.5 flex items-center gap-1.5 px-1 text-xs text-amber-200">
+          <OctagonPause aria-hidden className="size-3.5 shrink-0" />
+          Agents are paused — new directives will queue until you resume.
+        </p>
+      ) : null}
       <p className="mt-1.5 px-1 text-[11px] text-subtle">
         <kbd className="font-mono">Enter</kbd> to send · <kbd className="font-mono">Shift + Enter</kbd> for a
         new line
-        {busy ? " · The Chief of Staff is replying…" : ""}
+        {busy && !paused
+          ? waitingOnCeo
+            ? " · The Chief of Staff is waiting for your decision"
+            : " · The Chief of Staff is replying…"
+          : ""}
       </p>
     </form>
   );

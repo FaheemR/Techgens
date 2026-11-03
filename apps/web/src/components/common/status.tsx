@@ -20,6 +20,7 @@ import {
   PRIORITY_TONE,
   WORK_STATUS_LABEL,
   WORK_STATUS_TONE,
+  approvalStatusLabel,
   codingStatusMeta,
   departmentStyle,
   statusTone,
@@ -65,7 +66,7 @@ export function ApprovalKindBadge({ kind, className }: { kind: ApprovalKind; cla
 export function ApprovalStatusBadge({ status, className }: { status: ApprovalStatus; className?: string }) {
   return (
     <Badge tone={APPROVAL_STATUS_TONE[status] ?? "neutral"} dot className={className}>
-      {humanize(status)}
+      {approvalStatusLabel(status)}
     </Badge>
   );
 }

@@ -233,6 +233,15 @@ export function useJob(id: string) {
   });
 }
 
+/** Like `useJob`, but idle until there is an id (e.g. a chat reply whose job id isn't known yet). */
+export function useJobDetail(id: string | null) {
+  return useQuery({
+    queryKey: qk.job(id ?? ""),
+    queryFn: ({ signal }) => api.get<JobDetail>(`/api/jobs/${id}`, undefined, signal),
+    enabled: Boolean(id),
+  });
+}
+
 export function useDocuments(filters: DocumentFilters) {
   return useQuery({
     queryKey: qk.documents(filters),

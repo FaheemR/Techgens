@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { SettingsDTO, SystemInfo } from "@techgens/core";
-import { CircleCheck, ExternalLink, Github, KeyRound, Unplug } from "lucide-react";
+import { CircleCheck, ExternalLink, Github, KeyRound, Unplug, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -55,6 +55,13 @@ export function GithubConnection({
   const [owner, setOwner] = useState(gh.owner ?? "");
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [showConnect, setShowConnect] = useState(!gh.connected);
+  const changeButtonRef = useRef<HTMLButtonElement>(null);
+
+  function closeConnect() {
+    setShowConnect(false);
+    // The "Change" button reappears on the next render; return focus to it.
+    window.setTimeout(() => changeButtonRef.current?.focus(), 0);
+  }
 
   const onSettings = (result: SettingsDTO) => {
     queryClient.setQueryData(qk.settings, result);
@@ -148,7 +155,7 @@ export function GithubConnection({
             </dl>
             <div className="flex gap-2">
               {!showConnect ? (
-                <Button variant="ghost" size="sm" onClick={() => setShowConnect(true)}>
+                <Button ref={changeButtonRef} variant="ghost" size="sm" onClick={() => setShowConnect(true)}>
                   Change
                 </Button>
               ) : null}
@@ -170,6 +177,19 @@ export function GithubConnection({
             Demo mode: agents run on a simulated runtime{gh.mode === "demo" ? " and GitHub is simulated" : ""}
             . Connect GitHub and sign in to Copilot on the orchestrator host to run real agents.
           </p>
+        ) : null}
+
+        {showConnect && gh.connected ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted">
+              Switch to a different connection method or account. The current connection stays active until
+              the new one is saved.
+            </p>
+            <Button variant="ghost" size="sm" onClick={closeConnect}>
+              <X />
+              Cancel
+            </Button>
+          </div>
         ) : null}
 
         {showConnect ? (

@@ -11,6 +11,7 @@ import { DepartmentBadge } from "@/components/common/status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Select } from "@/components/ui/input";
 import { PageSkeleton } from "@/components/ui/skeleton";
@@ -19,7 +20,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { api, API_URL } from "@/lib/api";
 import { useQueryParams } from "@/lib/hooks";
-import { GATE_DESCRIPTIONS } from "@/lib/labels";
+import { GATE_DESCRIPTIONS, GATE_OFF_CONSEQUENCES } from "@/lib/labels";
 import { useApiMutation } from "@/lib/mutations";
 import { qk, useModels, useOrg, useSettings, useSystem } from "@/lib/queries";
 import { GithubConnection } from "./github-connection";
@@ -91,20 +92,48 @@ export function SettingsView() {
 
 function GatePolicyCard({ settings }: { settings: SettingsDTO }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const save = useSaveSettings();
+  const [confirmOff, setConfirmOff] = useState<ApprovalKind | null>(null);
+  const offCount = APPROVAL_KINDS.filter((kind) => settings.gatePolicy[kind] === false).length;
 
-  function toggle(kind: ApprovalKind, enabled: boolean) {
+  function apply(kind: ApprovalKind, enabled: boolean) {
     const gatePolicy = { ...settings.gatePolicy, [kind]: enabled };
     queryClient.setQueryData<SettingsDTO>(qk.settings, (s) => (s ? { ...s, gatePolicy } : s));
-    save.mutate({ gatePolicy });
+    save.mutate(
+      { gatePolicy },
+      {
+        onSuccess: () => {
+          setConfirmOff(null);
+          if (enabled) {
+            toast.success(`${GATE_LABELS[kind]} gate turned on`, "Agents will ask for your approval again.");
+          } else {
+            toast.info(`${GATE_LABELS[kind]} gate turned off`, GATE_OFF_CONSEQUENCES[kind]);
+          }
+        },
+      },
+    );
+  }
+
+  // Turning a gate off removes CEO oversight, so it needs an explicit confirmation; turning one on doesn't.
+  function toggle(kind: ApprovalKind, enabled: boolean) {
+    if (enabled) apply(kind, true);
+    else setConfirmOff(kind);
   }
 
   return (
-    <Card>
+    <Card id="approval-gates" className="scroll-mt-24">
       <CardHeader
         title="Approval gates"
         description="Which decisions need the CEO. Disabled gates are auto-approved and logged in the decision log."
         icon={ShieldCheck}
+        action={
+          offCount > 0 ? (
+            <Badge tone="warning">
+              {offCount} {offCount === 1 ? "gate" : "gates"} off
+            </Badge>
+          ) : null
+        }
       />
       <ul className="divide-y divide-border/70">
         {APPROVAL_KINDS.map((kind) => {
@@ -123,6 +152,7 @@ function GatePolicyCard({ settings }: { settings: SettingsDTO }) {
               </div>
               <Switch
                 id={id}
+                label={`Require approval: ${GATE_LABELS[kind]}`}
                 checked={enabled}
                 onCheckedChange={(value) => toggle(kind, value)}
                 aria-describedby={`${id}-desc`}
@@ -131,6 +161,32 @@ function GatePolicyCard({ settings }: { settings: SettingsDTO }) {
           );
         })}
       </ul>
+      <Dialog
+        open={confirmOff !== null}
+        onClose={() => setConfirmOff(null)}
+        title={confirmOff ? `Turn off the ${GATE_LABELS[confirmOff]} gate?` : ""}
+        description={confirmOff ? GATE_OFF_CONSEQUENCES[confirmOff] : undefined}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmOff(null)} data-autofocus>
+              Keep asking me
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => (confirmOff ? apply(confirmOff, false) : undefined)}
+              loading={save.isPending}
+            >
+              Turn off gate
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted">
+          These requests will be auto-approved and recorded in the decision log. You can turn the gate back on
+          at any time.
+        </p>
+      </Dialog>
     </Card>
   );
 }
@@ -409,7 +465,7 @@ function SystemCard() {
       <CardContent>
         <dl className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
           <Item label="Orchestrator">
-            <span className="font-mono text-xs">{API_URL}</span>
+            {API_URL ? <span className="font-mono text-xs">{API_URL}</span> : "Same origin (/api)"}
           </Item>
           <Item label="Version">{data?.version ?? "—"}</Item>
           <Item label="Agent runtime">

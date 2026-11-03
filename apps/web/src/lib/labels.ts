@@ -1,12 +1,13 @@
-import type {
-  ApprovalKind,
-  ApprovalStatus,
-  GoalStatus,
-  InitiativeStatus,
-  JobStatus,
-  Priority,
-  WorkItemKind,
-  WorkItemStatus,
+import {
+  GATE_LABELS,
+  type ApprovalKind,
+  type ApprovalStatus,
+  type GoalStatus,
+  type InitiativeStatus,
+  type JobStatus,
+  type Priority,
+  type WorkItemKind,
+  type WorkItemStatus,
 } from "@techgens/core";
 import {
   Bot,
@@ -79,6 +80,101 @@ export const APPROVAL_STATUS_TONE: Record<ApprovalStatus, Tone> = {
   rejected: "danger",
   changes_requested: "info",
   cancelled: "neutral",
+};
+
+/** CEO-facing names for approval states. `cancelled` = withdrawn because its initiative was cancelled. */
+export const APPROVAL_STATUS_LABEL: Record<ApprovalStatus, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+  changes_requested: "Changes requested",
+  cancelled: "Withdrawn",
+};
+
+export function approvalStatusLabel(status: string): string {
+  return (
+    APPROVAL_STATUS_LABEL[status as ApprovalStatus] ??
+    status.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+  );
+}
+
+/** Gate label for use mid-sentence: "Reject vision & roadmap", "Reject product spec (PRD)". */
+export function gateLabelLower(kind: ApprovalKind): string {
+  const label = GATE_LABELS[kind] ?? kind.replace(/_/g, " ");
+  return label.charAt(0).toLowerCase() + label.slice(1);
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Approval titles often repeat the gate ("Vision & roadmap — InvoiceLite MVP", or "Vision & roadmap: Vision & roadmap — …"
+ * in event summaries). Strips the repeated gate label so it can be shown next to a kind badge.
+ */
+export function approvalDisplayTitle(kind: ApprovalKind, title: string): string {
+  const label = GATE_LABELS[kind];
+  if (!label) return title;
+  const prefix = new RegExp(`^\\s*${escapeRegExp(label)}\\s*(?:[:\\-–—|·]\\s*)+`, "i");
+  let text = title;
+  while (prefix.test(text)) text = text.replace(prefix, "");
+  return text.trim() || title;
+}
+
+/** "Vision & roadmap: InvoiceLite MVP" — one mention of the gate, for places without a kind badge. */
+export function approvalHeadline(kind: ApprovalKind, title: string): string {
+  const label = GATE_LABELS[kind] ?? kind;
+  const rest = approvalDisplayTitle(kind, title);
+  return rest.toLowerCase() === label.toLowerCase() ? label : `${label}: ${rest}`;
+}
+
+/** Gates that move an initiative to its next lifecycle stage (rejecting one pauses the initiative). */
+export const STAGE_GATE_KINDS: readonly ApprovalKind[] = [
+  "vision_roadmap",
+  "spec",
+  "architecture",
+  "merge_to_main",
+  "prod_deploy",
+];
+
+/** One line at the top of an approval: what the CEO is actually authorising. */
+export const APPROVAL_INTENT: Record<ApprovalKind, string> = {
+  vision_roadmap: "Approving the charter and milestone roadmap. Discovery and research start next.",
+  spec: "Signing off the product requirements (PRD). Design and architecture start next.",
+  architecture:
+    "Approving the system design, ADRs and threat model. Backlog planning and repository setup start next.",
+  merge_to_main: "Merging the release PR into main. Required checks must be green.",
+  prod_deploy: "Deploying to production.",
+  budget_overrun: "Granting extra credits so the paused work can continue. Rejecting stops the blocked jobs.",
+  hire: "Staffing an additional agent. It starts taking work right away.",
+  decision: "An agent escalated a trade-off to you. Your answer and comment go back to the team.",
+};
+
+/** Comment placeholders per gate kind (examples that make sense for that decision). */
+export const DECISION_PLACEHOLDERS: Record<ApprovalKind, string> = {
+  vision_roadmap: "e.g. Approved — keep the MVP scope tight and drop multi-currency.",
+  spec: "e.g. Approved — move CSV export to v2 and add acceptance criteria for late payments.",
+  architecture: "e.g. Approved — prefer managed Postgres; revisit the queue choice after launch.",
+  merge_to_main: "e.g. Approved — mention the API change in the release notes.",
+  prod_deploy: "e.g. Approved — deploy after 18:00 UTC and watch error rates for an hour.",
+  budget_overrun: "e.g. One-off grant — keep research spend low for the rest of the window.",
+  hire: "e.g. Approved — a second QA engineer for the release crunch.",
+  decision: "e.g. Go with option B; we can revisit after launch.",
+};
+
+/** What happens when the CEO switches a gate off (shown in the confirmation). */
+export const GATE_OFF_CONSEQUENCES: Record<ApprovalKind, string> = {
+  vision_roadmap:
+    "New initiatives will move from intake into discovery without you reviewing their charter and roadmap.",
+  spec: "Product requirements (PRDs) will be accepted without your sign-off; design and architecture start immediately.",
+  architecture:
+    "System designs, ADRs and threat models will be accepted without your review; backlog planning starts immediately.",
+  merge_to_main: "Release pull requests will be merged into main without your review.",
+  prod_deploy: "Agents will deploy to production without asking you.",
+  budget_overrun:
+    "When a budget limit is hit, agents automatically get the suggested extra credits and keep spending.",
+  hire: "Agents will hire additional agents without asking you.",
+  decision: "Agents will settle significant trade-offs on their own instead of escalating them to you.",
 };
 
 export const APPROVAL_KIND_TONE: Record<ApprovalKind, Tone> = {
