@@ -53,7 +53,7 @@ export function Tabs({
         "flex max-w-full items-center overflow-x-auto",
         variant === "underline"
           ? "gap-1 border-b border-border"
-          : "gap-1 rounded-lg border border-border bg-[#0a1019] p-1",
+          : "gap-1 rounded-lg border border-border bg-field p-1",
         className,
       )}
     >

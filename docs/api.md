@@ -15,16 +15,23 @@ Response types live in `packages/core/src/api.ts` (`*DTO`). Errors: non-2xx with
 
 ## Company & strategy
 
-| Method         | Path                            | Body                                                                                                          | Response                                                                                                                                   |
-| -------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| GET / PUT      | `/api/company`                  | `Partial<CompanyDTO>`                                                                                         | `CompanyDTO`                                                                                                                               |
-| GET            | `/api/goals`                    | —                                                                                                             | `GoalDTO[]`                                                                                                                                |
-| POST           | `/api/goals`                    | `{ type, title, description?, parentId?, productId?, targetValue?, currentValue?, unit?, dueDate?, status? }` | `GoalDTO`                                                                                                                                  |
-| PATCH / DELETE | `/api/goals/:id`                | partial of the above                                                                                          | `GoalDTO` / `204`                                                                                                                          |
-| GET / POST     | `/api/products`                 | `{ name, description?, vision?, repoOwner?, repoName? }`                                                      | `ProductDTO[]` / `ProductDTO`                                                                                                              |
-| GET / PATCH    | `/api/products/:id`             | partial                                                                                                       | `ProductDTO`                                                                                                                               |
-| POST           | `/api/products/:id/bootstrap`   | `{ createRepo: boolean, private?: boolean }`                                                                  | `ProductDTO` (creates/bootstraps the GitHub repo from the product template)                                                                |
-| GET            | `/api/products/:id/azure-setup` | —                                                                                                             | `AzureSetupDTO` `{ script, variables: per-environment map, steps }` (guidance text when the product has no repo or Azure subscription yet) |
+| Method         | Path                            | Body                                                                                                                       | Response                                                                                                                                   |
+| -------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET / PUT      | `/api/company`                  | `Partial<CompanyDTO>`                                                                                                      | `CompanyDTO`                                                                                                                               |
+| GET            | `/api/goals`                    | —                                                                                                                          | `GoalDTO[]`                                                                                                                                |
+| POST           | `/api/goals`                    | `{ type, title, description?, parentId?, productId?, startValue?, targetValue?, currentValue?, unit?, dueDate?, status? }` | `GoalDTO`                                                                                                                                  |
+| PATCH / DELETE | `/api/goals/:id`                | partial of the above                                                                                                       | `GoalDTO` / `204`                                                                                                                          |
+| GET / POST     | `/api/products`                 | `{ name, description?, vision?, repoOwner?, repoName? }`                                                                   | `ProductDTO[]` / `ProductDTO`                                                                                                              |
+| GET / PATCH    | `/api/products/:id`             | partial                                                                                                                    | `ProductDTO`                                                                                                                               |
+| POST           | `/api/products/:id/bootstrap`   | `{ createRepo: boolean, private?: boolean }`                                                                               | `ProductDTO` (creates/bootstraps the GitHub repo from the product template)                                                                |
+| GET            | `/api/products/:id/azure-setup` | —                                                                                                                          | `AzureSetupDTO` `{ script, variables: per-environment map, steps }` (guidance text when the product has no repo or Azure subscription yet) |
+
+`GoalDTO.startValue` is the KR baseline. Progress is `(currentValue - startValue) / (targetValue - startValue)`;
+a missing legacy baseline uses zero, descending targets work, and an equal baseline/target is unmeasurable
+unless the goal is explicitly achieved. Saving company strategy does not dismiss setup. `CompanyDTO.onboarded`
+remains the legacy **checklist dismissal** flag; Dashboard `setup` separately reports saved strategy
+(name, mission and policies), GitHub availability (simulated in demo mode), and a sent CEO message.
+`DashboardDTO.budgets` contains current evaluated budgets, including grants and configured warning thresholds.
 
 ## Initiatives
 
@@ -37,20 +44,31 @@ Response types live in `packages/core/src/api.ts` (`*DTO`). Errors: non-2xx with
 
 ## Directives chat (CEO ↔ Chief of Staff)
 
-| Method     | Path                             | Body          | Response                                                                                                                               |
-| ---------- | -------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| GET / POST | `/api/chat/threads`              | `{ title? }`  | `ThreadDTO[]` / `ThreadDTO`                                                                                                            |
-| GET        | `/api/chat/threads/:id/messages` | —             | `MessageDTO[]` (oldest first)                                                                                                          |
-| POST       | `/api/chat/threads/:id/messages` | `{ content }` | `{ message: MessageDTO, jobId: string }` — the reply arrives via SSE (`agent.message_delta` with `data.threadId`, then `chat.message`) |
+| Method     | Path                             | Body                    | Response                                                                                                                               |
+| ---------- | -------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| GET / POST | `/api/chat/threads`              | `{ title? }`            | `ThreadDTO[]` / `ThreadDTO`                                                                                                            |
+| PATCH      | `/api/chat/threads/:id`          | `{ title?, archived? }` | `ThreadDTO` (trimmed title: 1-160 characters; reversible archive, no deletion)                                                         |
+| GET        | `/api/chat/threads/:id/messages` | —                       | `MessageDTO[]` (oldest first)                                                                                                          |
+| POST       | `/api/chat/threads/:id/messages` | `{ content }`           | `{ message: MessageDTO, jobId: string }` — the reply arrives via SSE (`agent.message_delta` with `data.threadId`, then `chat.message`) |
+
+Thread lists include active and archived conversations (`ThreadDTO.archived`); the UI filters them.
+Messages remain readable after archiving. Posting to an archived thread returns `400` until restored;
+archiving never stops jobs or initiatives.
 
 ## Organisation
 
-| Method      | Path              | Body                                                        | Response                      |
-| ----------- | ----------------- | ----------------------------------------------------------- | ----------------------------- |
-| GET         | `/api/org`        | —                                                           | `OrgDTO`                      |
-| POST        | `/api/agents`     | `{ roleId, name? }` (hire)                                  | `AgentDTO`                    |
-| GET / PATCH | `/api/agents/:id` | `{ name?, status?, modelOverride?, dailyCreditsOverride? }` | `AgentDetailDTO` / `AgentDTO` |
-| PUT         | `/api/roles/:id`  | `{ prompt?, model?, reasoningEffort?, tools?, budget? }`    | `RoleDTO`                     |
+| Method      | Path              | Body                                                                             | Response                      |
+| ----------- | ----------------- | -------------------------------------------------------------------------------- | ----------------------------- |
+| GET         | `/api/org`        | —                                                                                | `OrgDTO`                      |
+| POST        | `/api/agents`     | `{ roleId, name? }` (hire)                                                       | `AgentDTO`                    |
+| GET / PATCH | `/api/agents/:id` | `{ name?, status?, modelOverride?, dailyCreditsOverride?, replacementAgentId? }` | `AgentDetailDTO` / `AgentDTO` |
+| PUT         | `/api/roles/:id`  | `{ prompt?, model?, reasoningEffort?, tools?, budget? }`                         | `RoleDTO`                     |
+
+Retiring (`status: "retired"`) returns `409` while jobs are queued/running/waiting. Unfinished work requires an
+explicit `replacementAgentId`: a different active agent with the same role. Work transfer and retirement are atomic;
+completed/cancelled work, jobs, documents and spending history remain attributed to the old agent. No jobs are
+created or transferred. The last active Chief of Staff cannot be retired. Job/work assignment to a retired agent
+returns `409`. A replacement outside a retirement request returns `400`.
 
 ## Work, jobs, documents, decisions
 
@@ -86,6 +104,12 @@ Every decision, auto-approval or withdrawal marks the approval's notifications r
   `stagingEvidence`, `rollback`, `changes`, `releasePrNumber`, `releasePrUrl`.
 - `budget_overrun` — `BudgetOverrunPayload`: `scope`, `scopeName`, `period`, `limitCredits` (base), `grantedCredits`,
   `spentCredits`, `windowEndsAt`, `suggestedExtraCredits`, `grantedExtraCredits` (after approval), `budgetId`, `jobIds`.
+
+New merge/deploy/budget requests include `risk` and `recommendation` review guidance. Budget requests also include
+`spendByAgent: [{ agentName, credits }]` scoped to that budget's accounting window at request time, not company-wide
+monthly totals. Document gates should provide Markdown `## Risk / blast radius` and `## Recommendation` sections
+in their summary or attached documents. The inbox displays source-labelled excerpts and explicitly flags missing
+evidence; guidance does not bypass execution checks or change approval policy.
 
 ## Budget & usage
 

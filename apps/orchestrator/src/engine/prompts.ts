@@ -12,7 +12,9 @@ export interface StageBriefInput {
 
 function docList(docs: Document[]): string {
   if (!docs.length) return "- (none yet)";
-  return docs.map((d) => `- ${d.title} — ${d.kind}, v${d.currentVersion}, ${d.status} (id ${d.id})`).join("\n");
+  return docs
+    .map((d) => `- ${d.title} — ${d.kind}, v${d.currentVersion}, ${d.status} (id ${d.id})`)
+    .join("\n");
 }
 
 export function stageBrief(input: StageBriefInput): string {
@@ -31,9 +33,21 @@ export function stageBrief(input: StageBriefInput): string {
   if (ini.targetDate) lines.push(`**Target date:** ${ini.targetDate.toISOString().slice(0, 10)}`);
   if (ini.budgetCredits) lines.push(`**Initiative budget:** ${formatCredits(ini.budgetCredits)} AI credits`);
   lines.push("", "## What to do", def.instructions);
-  if (def.gate) lines.push("", `This stage ends with the CEO gate **${def.gate}**. Reference the relevant document ids when requesting approval.`);
+  if (def.gate)
+    lines.push(
+      "",
+      `This stage ends with the CEO gate **${def.gate}**. Reference the relevant document ids when requesting approval.`,
+      "Write a concrete CEO decision brief in the approval summary: outcome, scope and non-goals, measurable success criteria, timeline and credit budget. Include Markdown sections '## Risk / blast radius' (affected users/systems, failure modes, mitigations and unknowns) and '## Recommendation' (proceed/request changes/stop, reasons and trade-offs). Cite attached evidence and label assumptions; never invent passed checks or verified staging.",
+    );
   if (input.milestones.length) {
-    lines.push("", "## Roadmap", ...input.milestones.map((m) => `- ${m.title}${m.dueDate ? ` (due ${m.dueDate.toISOString().slice(0, 10)})` : ""} — ${m.status}`));
+    lines.push(
+      "",
+      "## Roadmap",
+      ...input.milestones.map(
+        (m) =>
+          `- ${m.title}${m.dueDate ? ` (due ${m.dueDate.toISOString().slice(0, 10)})` : ""} — ${m.status}`,
+      ),
+    );
   }
   lines.push("", "## Documents in this initiative", docList(input.documents));
   if (input.feedback) lines.push("", "## CEO feedback to address", input.feedback);
@@ -61,7 +75,9 @@ export function delegationBrief(input: {
     "## Context",
   ];
   if (input.initiative) {
-    lines.push(`- Initiative: ${input.initiative.title} (id ${input.initiative.id}, stage ${input.initiative.stage})`);
+    lines.push(
+      `- Initiative: ${input.initiative.title} (id ${input.initiative.id}, stage ${input.initiative.stage})`,
+    );
     lines.push(`- CEO directive: ${truncate(input.initiative.directive, 800)}`);
   }
   if (input.parentTitle) lines.push(`- Part of: ${input.parentTitle}`);

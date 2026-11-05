@@ -8,8 +8,8 @@ export function LogoMark({ className }: { className?: string }) {
     <svg viewBox="0 0 32 32" aria-hidden className={cn("size-8", className)}>
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#22d3ee" />
-          <stop offset="1" stopColor="#6366f1" />
+          <stop offset="0" stopColor="var(--color-accent-hover)" />
+          <stop offset="1" stopColor="var(--color-accent-strong)" />
         </linearGradient>
       </defs>
       <rect
@@ -18,7 +18,7 @@ export function LogoMark({ className }: { className?: string }) {
         width="30"
         height="30"
         rx="8"
-        fill="#0b1522"
+        fill="var(--color-surface)"
         stroke={`url(#${gradientId})`}
         strokeWidth="1.5"
       />
@@ -28,8 +28,8 @@ export function LogoMark({ className }: { className?: string }) {
         strokeWidth="2.6"
         strokeLinecap="round"
       />
-      <circle cx="23" cy="21.5" r="2.2" fill="#22d3ee" />
-      <circle cx="9" cy="21.5" r="1.4" fill="#6366f1" />
+      <circle cx="23" cy="21.5" r="2.2" fill="var(--color-accent)" />
+      <circle cx="9" cy="21.5" r="1.4" fill="var(--color-accent-strong)" />
     </svg>
   );
 }

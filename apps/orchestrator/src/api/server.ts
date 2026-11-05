@@ -103,22 +103,32 @@ export async function buildServer(app: Techgens): Promise<FastifyInstance> {
   });
 
   server.get("/api/dashboard", async (): Promise<DashboardDTO> => {
-    const [company, initiatives, pending, jobs, goals, usage, events, incidents] = await Promise.all([
-      app.company.get(),
-      app.lifecycle.list(),
-      app.approvals.list("pending"),
-      app.engine.listJobDTOs({ limit: 50 }),
-      app.company.listGoals(),
-      app.budget.summary(14),
-      app.bus.list({ limit: 30 }),
-      app.db.query.incidents.findMany({ where: (t, { ne }) => ne(t.status, "resolved") }),
-    ]);
+    const [company, initiatives, pending, jobs, goals, usage, events, incidents, directives] =
+      await Promise.all([
+        app.company.get(),
+        app.lifecycle.list(),
+        app.approvals.list("pending"),
+        Promise.all([
+          app.engine.listJobDTOs({ status: "queued", limit: 500 }),
+          app.engine.listJobDTOs({ status: "running", limit: 500 }),
+          app.engine.listJobDTOs({ status: "waiting", limit: 500 }),
+        ]).then((groups) => groups.flat()),
+        app.company.listGoals(),
+        app.budget.summary(14),
+        app.bus.list({ limit: 200 }),
+        app.db.query.incidents.findMany({ where: (t, { ne }) => ne(t.status, "resolved") }),
+        app.db.query.messages.findFirst({ where: (t, { eq }) => eq(t.authorType, "ceo") }),
+      ]);
     const monthBudget = usage.budgets.find((b) => b.scope === "company" && b.period === "month");
     return {
+      setup: {
+        strategy: Boolean(company.name.trim() && company.mission.trim() && company.policies.trim()),
+        github: app.github.connected,
+        directive: Boolean(directives),
+      },
+      budgets: usage.budgets,
       company: companyDTO(company),
-      initiatives: await app.lifecycle.summaries(
-        initiatives.filter((i) => i.status !== "cancelled").slice(0, 12),
-      ),
+      initiatives: await app.lifecycle.summaries(initiatives.filter((i) => i.status !== "cancelled")),
       pendingApprovals: await app.approvals.summaries(pending),
       activeJobs: jobs.filter((j) => ["queued", "running", "waiting"].includes(j.status)),
       goals: goals.map(goalDTO),

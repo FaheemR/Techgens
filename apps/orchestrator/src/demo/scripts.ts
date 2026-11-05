@@ -89,9 +89,19 @@ export function installDemoScripts(
       }));
     if (before && !changesRequested(ctx)) await before();
     const ids = await writeDocs(ctx, docs());
-    const summary = restartedAfterRejection(ctx)
-      ? `Revised ${label.toLowerCase()} after your rejection: a different approach that addresses your feedback ("${quotedFeedback(ctx)}"). Key points are summarised at the top of each document.`
-      : `${label} is ready for your review. Key points are summarised at the top of each document.`;
+    const directive = /\*\*CEO directive:\*\* (.+)/.exec(ctx.history[0] ?? "")?.[1] ?? initiativeTitle(ctx);
+    const budget = /\*\*Initiative budget:\*\* (.+)/.exec(ctx.history[0] ?? "")?.[1] ?? "Not specified";
+    const summary = [
+      restartedAfterRejection(ctx)
+        ? `Revised ${label.toLowerCase()} after your rejection, addressing your feedback: "${quotedFeedback(ctx)}".`
+        : `${label}: ${initiativeTitle(ctx)}.`,
+      `## Outcome\n${directive}`,
+      "## Scope\nDemo MVP: account onboarding and item create/list/edit flows. Excludes enterprise SSO and native mobile apps.",
+      "## Success criteria\nAll must-have stories pass end-to-end on staging; target 50 active accounts and 40% activation within four weeks after launch. These are demo targets, not measured results.",
+      `## Timeline and budget\n${budget}. Proposed roadmap: discovery week 1, architecture week 2, staging week 4, launch week 5; CEO directive takes precedence.`,
+      "## Risk / blast radius\nScope and demand are unvalidated demo assumptions. Approval advances the proposal to the next lifecycle stage, not directly to production. Scope creep and credit burn are mitigated by stage gates and enforced budgets.",
+      "## Recommendation\nProceed to the next review stage only if the scope, targets and budget match your intent; otherwise request changes. Scripted demo proposal, not independent market or production evidence.",
+    ].join("\n\n");
     await ctx.callTool("request_approval", {
       kind: gate,
       title: `${label} — ${initiativeTitle(ctx)}`,

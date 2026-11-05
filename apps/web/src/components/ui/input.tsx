@@ -21,8 +21,8 @@ import { cn } from "@/lib/utils";
 
 // The control border is the only boundary of a field, so it uses the ≥ 3:1 `control` token (WCAG 1.4.11).
 const FIELD_BASE =
-  "w-full rounded-lg border border-control bg-[#0a1019] text-sm text-fg placeholder:text-subtle transition-colors " +
-  "hover:border-subtle focus-visible:border-accent/70 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent/40 " +
+  "w-full rounded-lg border border-control bg-field text-sm text-fg placeholder:text-subtle transition-colors " +
+  "hover:border-subtle focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent " +
   "disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-rose-400";
 
 interface FieldState {

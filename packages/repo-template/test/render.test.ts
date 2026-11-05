@@ -18,7 +18,11 @@ import {
 // Parsed YAML/JSON documents are inspected loosely in assertions.
 type Json = Record<string, any>;
 
-const roles = loadRolesFromDir();
+// Keep fixture content identical to Git's LF blobs even in a CRLF Windows checkout.
+const roles = loadRolesFromDir().map((role) => ({
+  ...role,
+  prompt: role.prompt.replace(/\r\n/g, "\n"),
+}));
 const input: ProductRepoInput = {
   productName: "Acme Notes",
   productSlug: "acme-notes",

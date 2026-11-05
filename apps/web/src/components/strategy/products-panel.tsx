@@ -379,7 +379,7 @@ function ProductDetail({ product }: { product: ProductDTO }) {
               type="checkbox"
               checked={createRepo}
               onChange={(e) => setCreateRepo(e.target.checked)}
-              className="mt-0.5 size-4 accent-cyan-400"
+              className="mt-0.5 size-4 accent-accent"
             />
             <span>
               <span className="font-medium">Create the repository</span>
@@ -395,7 +395,7 @@ function ProductDetail({ product }: { product: ProductDTO }) {
               checked={isPrivate}
               disabled={!createRepo}
               onChange={(e) => setIsPrivate(e.target.checked)}
-              className="mt-0.5 size-4 accent-cyan-400"
+              className="mt-0.5 size-4 accent-accent"
             />
             <span>
               <span className="font-medium">Private repository</span>

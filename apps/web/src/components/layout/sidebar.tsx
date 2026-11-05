@@ -55,7 +55,7 @@ export function NavLinks({
                     {active ? (
                       <span
                         aria-hidden
-                        className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-accent shadow-[0_0_10px_rgba(34,211,238,0.8)]"
+                        className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-accent"
                       />
                     ) : null}
                     <Icon

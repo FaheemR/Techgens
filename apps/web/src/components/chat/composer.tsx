@@ -63,7 +63,7 @@ export function Composer({
     >
       <div
         className={cn(
-          "flex items-end gap-2 rounded-xl border border-border bg-[#0a1019] p-2 transition-colors focus-within:border-accent/60",
+          "flex items-end gap-2 rounded-xl border border-border bg-field p-2 transition-colors focus-within:border-accent",
           disabled && "opacity-60",
         )}
       >

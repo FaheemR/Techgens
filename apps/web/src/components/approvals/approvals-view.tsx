@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ApprovalDetailDTO, ApprovalOutcome, ApprovalStatus, ApprovalSummaryDTO } from "@techgens/core";
@@ -9,14 +9,14 @@ import { Inbox, PartyPopper, ShieldOff, TriangleAlert } from "lucide-react";
 import { QueryView } from "@/components/common/query-view";
 import { ApprovalKindBadge, ApprovalStatusBadge } from "@/components/common/status";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { PageSkeleton, SkeletonRows } from "@/components/ui/skeleton";
-import { useToast } from "@/components/ui/toast";
 import { relativeTime } from "@/lib/format";
 import { useNow, useQueryParams } from "@/lib/hooks";
-import { STAGE_GATE_KINDS, approvalDisplayTitle, approvalHeadline } from "@/lib/labels";
+import { STAGE_GATE_KINDS, approvalDisplayTitle, approvalOutcomeLabel } from "@/lib/labels";
 import { qk, useApprovals, useSettings } from "@/lib/queries";
 import { asNumber, cn } from "@/lib/utils";
 import { ApprovalDetailPane } from "./approval-detail";
@@ -75,7 +75,7 @@ const EMPTY: Record<Exclude<Filter, "pending">, { title: string; description: st
   },
 };
 
-function decisionToast(
+function decisionMessage(
   approval: ApprovalDetailDTO,
   outcome: ApprovalOutcome,
   grantedCredits: number | undefined,
@@ -126,33 +126,27 @@ export function ApprovalsView() {
   const { filter, unknown: unknownStatus } = parseFilter(get("status"));
   const selectedId = get("id");
   const queryClient = useQueryClient();
-  const toast = useToast();
+  const [recorded, setRecorded] = useState<{
+    id: string;
+    title: string;
+    outcome: ApprovalOutcome;
+    message: ReturnType<typeof decisionMessage>;
+  } | null>(null);
   const list = useApprovals(FILTERS.find((f) => f.value === filter)?.status);
   const pendingList = useApprovals("pending");
   const settings = useSettings();
   const now = useNow();
   const listRef = useRef<HTMLDivElement>(null);
-  /** Where focus goes once the inbox has advanced after a decision. */
+  const outcomeRef = useRef<HTMLHeadingElement>(null);
   const focusAfterDecision = useRef<"detail" | "list" | null>(null);
-  /** Filter for which an auto-select navigation is in flight (guards against a second, competing replace). */
-  const autoSelecting = useRef<Filter | null>(null);
 
-  const items = list.data ?? [];
-  const firstId = items[0]?.id;
   const offGates = settings.data ? APPROVAL_KINDS.filter((k) => settings.data.gatePolicy[k] === false) : [];
+  const outcome = recorded?.id === selectedId ? recorded : null;
+  const next = pendingList.data?.find((approval) => approval.id !== recorded?.id);
 
-  // On wide screens, open the first item automatically so the inbox reads like a mail client. Only once per
-  // arrival/filter: a second replace while the first is in flight would swap the item (and the typed comment) away.
   useEffect(() => {
-    if (selectedId) {
-      autoSelecting.current = null;
-      return;
-    }
-    if (!firstId || list.isPlaceholderData || autoSelecting.current === filter) return;
-    if (!window.matchMedia("(min-width: 1024px)").matches) return;
-    autoSelecting.current = filter;
-    set({ id: firstId });
-  }, [selectedId, firstId, filter, list.isPlaceholderData, set]);
+    if (outcome) focusWithFlash(outcomeRef.current);
+  }, [outcome]);
 
   useEffect(() => {
     if (selectedId || focusAfterDecision.current !== "list") return;
@@ -168,40 +162,40 @@ export function ApprovalsView() {
 
   function onDecided(decided: ApprovalDetailDTO, outcome: ApprovalOutcome, grantedCredits?: number) {
     queryClient.setQueryData(qk.approval(decided.id), decided);
-    const pending = (pendingList.data ?? []).filter((a) => a.status === "pending");
-    const index = pending.findIndex((a) => a.id === decided.id);
-    const remaining = pending.filter((a) => a.id !== decided.id);
-    const next = remaining[Math.max(0, index)] ?? remaining[remaining.length - 1];
     queryClient.setQueryData<ApprovalSummaryDTO[]>(qk.approvals("pending"), (current) =>
       current?.filter((a) => a.id !== decided.id),
     );
-    const message = decisionToast(decided, outcome, grantedCredits);
-    toast.success(
-      message.title,
-      [
-        message.detail,
-        next ? `Next: ${approvalHeadline(next.kind, next.title)}` : "Nothing else is waiting on you.",
-      ]
-        .filter(Boolean)
-        .join(" · "),
-    );
-    focusAfterDecision.current = next ? "detail" : "list";
-    set({
-      id: next?.id ?? null,
-      ...(next && filter !== "pending" && filter !== "all" ? { status: null } : {}),
+    setRecorded({
+      id: decided.id,
+      title: approvalDisplayTitle(decided.kind, decided.title),
+      outcome,
+      message: decisionMessage(decided, outcome, grantedCredits),
     });
   }
 
   const empty = filter === "pending" ? null : EMPTY[filter];
 
   function changeFilter(value: Filter) {
+    setRecorded(null);
     set({ status: value === "pending" ? null : value, id: null });
+  }
+
+  function returnToQueue() {
+    setRecorded(null);
+    focusAfterDecision.current = "list";
+    set({ status: null, id: null });
+  }
+
+  function backToInbox() {
+    setRecorded(null);
+    focusAfterDecision.current = "list";
+    set({ id: null });
   }
 
   if (!hydrated) return <PageSkeleton />;
 
   return (
-    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[560px] flex-col">
+    <div className="mx-auto flex max-w-5xl flex-col">
       <div className="mb-4 flex flex-col gap-3 min-[1366px]:flex-row min-[1366px]:items-end min-[1366px]:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -227,37 +221,39 @@ export function ApprovalsView() {
             Stage gates, releases, deployments and budget decisions waiting on the CEO.
           </p>
         </div>
-        <div className="shrink-0">
-          <div className="flex items-center gap-2 sm:hidden">
-            <label htmlFor="approvals-filter" className="text-sm text-muted">
-              Show
-            </label>
-            <Select
-              id="approvals-filter"
-              className="min-w-0 flex-1"
+        {!selectedId ? (
+          <div className="shrink-0">
+            <div className="flex items-center gap-2 sm:hidden">
+              <label htmlFor="approvals-filter" className="text-sm text-muted">
+                Show
+              </label>
+              <Select
+                id="approvals-filter"
+                className="min-w-0 flex-1"
+                value={filter}
+                onChange={(event) => changeFilter(event.target.value as Filter)}
+              >
+                {FILTERS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                    {f.value === "pending" && pendingList.data ? ` (${pendingList.data.length})` : ""}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Segmented
+              label="Filter approvals"
+              className="max-sm:hidden"
+              options={FILTERS.map((f) => ({
+                value: f.value,
+                label: f.label,
+                count: f.value === "pending" ? pendingList.data?.length : undefined,
+              }))}
               value={filter}
-              onChange={(event) => changeFilter(event.target.value as Filter)}
-            >
-              {FILTERS.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                  {f.value === "pending" && pendingList.data ? ` (${pendingList.data.length})` : ""}
-                </option>
-              ))}
-            </Select>
+              onChange={changeFilter}
+            />
           </div>
-          <Segmented
-            label="Filter approvals"
-            className="max-sm:hidden"
-            options={FILTERS.map((f) => ({
-              value: f.value,
-              label: f.label,
-              count: f.value === "pending" ? pendingList.data?.length : undefined,
-            }))}
-            value={filter}
-            onChange={changeFilter}
-          />
-        </div>
+        ) : null}
       </div>
       {unknownStatus ? (
         <p className="-mt-2 mb-3 flex items-center gap-1.5 text-xs text-amber-200">
@@ -268,8 +264,8 @@ export function ApprovalsView() {
         </p>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]">
-        <Card className={cn("flex min-h-0 flex-col overflow-hidden", selectedId && "hidden lg:flex")}>
+      <div className="grid gap-4">
+        <Card className={cn("flex min-h-0 flex-col overflow-hidden", selectedId && "hidden")}>
           <div
             ref={listRef}
             tabIndex={-1}
@@ -301,7 +297,11 @@ export function ApprovalsView() {
                       <li key={approval.id}>
                         <button
                           type="button"
-                          onClick={() => set({ id: approval.id })}
+                          onClick={() => {
+                            setRecorded(null);
+                            focusAfterDecision.current = "detail";
+                            set({ id: approval.id }, "push");
+                          }}
                           aria-current={selected ? "true" : undefined}
                           className={cn(
                             "relative w-full px-4 py-3 text-left transition-colors",
@@ -345,23 +345,67 @@ export function ApprovalsView() {
           </div>
         </Card>
 
-        <Card className={cn("min-h-0 overflow-hidden", !selectedId && "hidden lg:block")}>
-          {selectedId ? (
-            <ApprovalDetailPane
-              id={selectedId}
-              onDecided={onDecided}
-              onBack={() => set({ id: null })}
-              takeFocus={takeFocus}
-            />
-          ) : (
-            <EmptyState
-              className="h-full"
-              icon={Inbox}
-              title="Select an approval"
-              description="Review the summary and attached documents, then approve, request changes or reject."
-            />
-          )}
-        </Card>
+        {selectedId ? (
+          <Card className="min-w-0 overflow-hidden">
+            {outcome ? (
+              <section aria-label="Decision outcome" className="space-y-6 p-5 sm:p-8">
+                <div role="status">
+                  <h2
+                    ref={outcomeRef}
+                    tabIndex={-1}
+                    className={cn("rounded-sm text-2xl font-semibold", FOCUS_FLASH_INSET)}
+                  >
+                    {approvalOutcomeLabel(outcome.outcome)}
+                  </h2>
+                  <p className="mt-3 break-words text-lg font-medium">{outcome.title}</p>
+                  <p className="mt-2 max-w-[65ch] text-base leading-relaxed text-muted">
+                    {outcome.message.title}
+                  </p>
+                  {outcome.message.detail ? (
+                    <p className="mt-2 text-base text-muted">{outcome.message.detail}</p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button size="lg" onClick={returnToQueue}>
+                    Return to queue
+                  </Button>
+                  {next ? (
+                    <Button
+                      size="lg"
+                      variant="primary"
+                      onClick={() => {
+                        // Keep the outcome mounted until navigation so the old detail cannot consume focus.
+                        focusAfterDecision.current = "detail";
+                        set({ id: next.id, status: null }, "push");
+                      }}
+                    >
+                      Review next
+                    </Button>
+                  ) : (
+                    <p className="self-center text-sm text-muted">No other pending decisions.</p>
+                  )}
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    onClick={() => {
+                      focusAfterDecision.current = "detail";
+                      setRecorded(null);
+                    }}
+                  >
+                    View recorded decision
+                  </Button>
+                </div>
+              </section>
+            ) : (
+              <ApprovalDetailPane
+                id={selectedId}
+                onDecided={onDecided}
+                onBack={backToInbox}
+                takeFocus={takeFocus}
+              />
+            )}
+          </Card>
+        ) : null}
       </div>
     </div>
   );

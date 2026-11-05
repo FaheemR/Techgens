@@ -29,7 +29,7 @@ export function Segmented<T extends string>({
       role="radiogroup"
       aria-label={label}
       className={cn(
-        "inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-border bg-[#0a1019] p-0.5",
+        "inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-border bg-field p-0.5",
         className,
       )}
       onKeyDown={(event) => {

@@ -7,9 +7,8 @@ export type ButtonVariant =
 export type ButtonSize = "xs" | "sm" | "md" | "lg" | "icon" | "icon-sm";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary:
-    "bg-accent text-accent-fg font-semibold hover:bg-cyan-300 shadow-[0_0_0_1px_rgba(34,211,238,0.35),0_8px_24px_-14px_rgba(34,211,238,0.8)]",
-  secondary: "border border-border bg-surface-3 text-fg hover:border-border-strong hover:bg-[#1c2a3e]",
+  primary: "bg-accent text-accent-fg font-semibold hover:bg-accent-hover",
+  secondary: "border border-border bg-surface-3 text-fg hover:border-border-strong hover:bg-surface-hover",
   outline: "border border-border-strong text-fg hover:bg-white/5",
   ghost: "text-muted hover:bg-white/5 hover:text-fg",
   danger: "bg-danger text-white font-semibold hover:bg-danger-strong",

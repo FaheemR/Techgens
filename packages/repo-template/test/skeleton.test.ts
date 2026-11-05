@@ -30,7 +30,11 @@ const PRODUCT_NAME = 'Acme "Notes" <Beta> & Friends — ünïcode';
 
 /** Child processes must not inherit the parent Vitest worker's state, nor CI's forced colour output. */
 const childEnv = {
-  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(VITEST|TINYPOOL)|^NODE_OPTIONS$|^FORCE_COLOR$/.test(key))),
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([key]) => !/^(VITEST|TINYPOOL)|^NODE_OPTIONS$|^FORCE_COLOR$/.test(key),
+    ),
+  ),
   NO_COLOR: "1",
 };
 const stripAnsi = (text: string) => text.replace(/\u001b\[[0-9;]*m/g, "");
@@ -99,17 +103,28 @@ describe.skipIf(!toolchain)("generated product skeleton (built and tested with i
       expect(build.status, build.output).toBe(0);
       expect(existsSync(join(dir, "dist", "server.js"))).toBe(true);
 
-      const server = spawn(process.execPath, ["dist/server.js"], {
+      // Windows cannot deliver POSIX SIGTERM; IPC invokes the installed handler instead.
+      const startArgs =
+        process.platform === "win32"
+          ? [
+              "--import",
+              `data:text/javascript,${encodeURIComponent('process.on("message", (signal) => { if (signal === "SIGTERM") process.emit("SIGTERM"); });')}`,
+              "dist/server.js",
+            ]
+          : ["dist/server.js"];
+      const server = spawn(process.execPath, startArgs, {
         cwd: dir,
         env: { ...childEnv, PORT: "0", APP_VERSION: "skeleton-sha" },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
       });
       let stdout = "";
       const exited = new Promise<number | null>((resolve) => server.once("exit", resolve));
       try {
+        const output = server.stdout;
+        if (!output) throw new Error("Expected the product server's piped stdout");
         const started = await new Promise<{ port: number; version: string }>((resolve, reject) => {
           const timer = setTimeout(() => reject(new Error(`server did not start: ${stdout}`)), 15_000);
-          server.stdout.on("data", (chunk: Buffer) => {
+          output.on("data", (chunk: Buffer) => {
             stdout += chunk.toString();
             const line = stdout.split("\n").find((l) => l.includes('"server started"'));
             if (line) {
@@ -130,9 +145,11 @@ describe.skipIf(!toolchain)("generated product skeleton (built and tested with i
           "<h1>Acme &#34;Notes&#34; &#60;Beta&#62; &#38; Friends — ünïcode</h1>",
         );
       } finally {
-        server.kill("SIGTERM");
+        if (process.platform === "win32" && server.connected) server.send("SIGTERM");
+        else server.kill("SIGTERM");
+        await exited;
       }
-      expect(await exited).toBe(0);
+      expect(server.exitCode).toBe(0);
       const logs = stdout
         .trim()
         .split("\n")

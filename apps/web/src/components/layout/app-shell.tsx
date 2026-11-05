@@ -31,7 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onOpenNav={() => setNavOpen(true)} />
         <SystemBanners />
-        <main id="main" tabIndex={-1} className="bg-grid flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8">
+        <main id="main" tabIndex={-1} className="flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
       </div>

@@ -16,7 +16,19 @@ export class WorkService {
   constructor(private readonly app: Techgens) {}
 
   async create(input: Omit<NewWorkItem, "id" | "createdAt" | "updatedAt">): Promise<WorkItem> {
-    const [row] = await this.app.db.insert(schema.workItems).values(input).returning();
+    const row = await this.app.db.transaction(async (tx) => {
+      if (input.assigneeAgentId) {
+        const [agent] = await tx
+          .select()
+          .from(schema.agents)
+          .where(eq(schema.agents.id, input.assigneeAgentId))
+          .for("update");
+        if (!agent || agent.status === "retired")
+          throw new DomainError("Choose a non-retired agent for this work item.", "conflict");
+      }
+      const [created] = await tx.insert(schema.workItems).values(input).returning();
+      return created!;
+    });
     await this.app.bus.emit({
       type: "work_item.created",
       actorType: input.createdByAgentId ? "agent" : "system",
@@ -35,10 +47,43 @@ export class WorkService {
     return row;
   }
 
-  async update(id: string, patch: Partial<Omit<WorkItem, "id" | "createdAt">>, actor?: { agentId?: string }): Promise<WorkItem> {
+  async update(
+    id: string,
+    patch: Partial<Omit<WorkItem, "id" | "createdAt">>,
+    actor?: { agentId?: string },
+  ): Promise<WorkItem> {
     const values: Partial<WorkItem> = { ...patch, updatedAt: new Date() };
     if (patch.status === "done" || patch.status === "cancelled") values.completedAt = new Date();
-    const [row] = await this.app.db.update(schema.workItems).set(values).where(eq(schema.workItems.id, id)).returning();
+    const row = await this.app.db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(schema.workItems)
+        .where(eq(schema.workItems.id, id))
+        .for("update");
+      if (!current) throw new DomainError(`work item ${id} not found`, "not_found");
+      const reopening = patch.status !== undefined && patch.status !== "done" && patch.status !== "cancelled";
+      const assignee =
+        patch.assigneeAgentId !== undefined
+          ? patch.assigneeAgentId
+          : reopening
+            ? current.assigneeAgentId
+            : null;
+      if (assignee) {
+        const [agent] = await tx
+          .select()
+          .from(schema.agents)
+          .where(eq(schema.agents.id, assignee))
+          .for("update");
+        if (!agent || agent.status === "retired")
+          throw new DomainError("Choose a non-retired agent for this work item.", "conflict");
+      }
+      const [updated] = await tx
+        .update(schema.workItems)
+        .set(values)
+        .where(eq(schema.workItems.id, id))
+        .returning();
+      return updated;
+    });
     if (!row) throw new DomainError(`work item ${id} not found`, "not_found");
     if (patch.status === "done" && row.parentId) await this.rollupParent(row.parentId);
     await this.app.bus.emit({
@@ -62,7 +107,11 @@ export class WorkService {
     await this.update(parent.id, { status: "done" });
     if (parent.githubIssueNumber && parent.githubRepo && this.app.github.connected) {
       const [owner, name] = parent.githubRepo.split("/") as [string, string];
-      await (await this.app.github.botPort(owner)).updateIssue({ owner, name }, parent.githubIssueNumber, { state: "closed" }).catch((err) => this.app.log.warn({ err: (err as Error).message }, "closing parent issue failed"));
+      await (
+        await this.app.github.botPort(owner)
+      )
+        .updateIssue({ owner, name }, parent.githubIssueNumber, { state: "closed" })
+        .catch((err) => this.app.log.warn({ err: (err as Error).message }, "closing parent issue failed"));
     }
   }
 
@@ -85,7 +134,10 @@ export class WorkService {
   async dtos(items: WorkItem[]): Promise<WorkItemDTO[]> {
     const ids = [...new Set(items.map((i) => i.assigneeAgentId).filter((x): x is string => Boolean(x)))];
     const agents = ids.length
-      ? await this.app.db.select({ id: schema.agents.id, name: schema.agents.name }).from(schema.agents).where(inArray(schema.agents.id, ids))
+      ? await this.app.db
+          .select({ id: schema.agents.id, name: schema.agents.name })
+          .from(schema.agents)
+          .where(inArray(schema.agents.id, ids))
       : [];
     const names = new Map(agents.map((a) => [a.id, a.name]));
     return items.map((w) => ({
@@ -121,7 +173,12 @@ export class WorkService {
   async openCodingTasks(initiativeId: string): Promise<WorkItem[]> {
     const items = await this.list({ initiativeId });
     return items.filter(
-      (w) => w.forCodingAgent && w.status !== "done" && w.status !== "cancelled" && w.kind !== "epic" && w.kind !== "story",
+      (w) =>
+        w.forCodingAgent &&
+        w.status !== "done" &&
+        w.status !== "cancelled" &&
+        w.kind !== "epic" &&
+        w.kind !== "story",
     );
   }
 }

@@ -332,7 +332,7 @@ function TranscriptEntry({
     const result = event.data.result ?? event.data.output;
     return (
       <li className="ml-11">
-        <details className="group rounded-lg border border-border bg-[#0a1019]">
+        <details className="group rounded-lg border border-border bg-field">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs">
             <Wrench aria-hidden className="size-3.5 text-subtle" />
             <span className="font-mono font-medium text-fg">{tool}</span>
@@ -418,7 +418,7 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-subtle">{label}</p>
       <pre
         className={cn(
-          "max-h-72 overflow-auto rounded-md border border-border bg-[#060a10] p-2 font-mono text-[11px] leading-relaxed text-muted",
+          "max-h-72 overflow-auto rounded-md border border-border bg-code p-2 font-mono text-[11px] leading-relaxed text-muted",
           !isRecord(value) && "whitespace-pre-wrap",
         )}
       >

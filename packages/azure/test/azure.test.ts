@@ -1,4 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DomainError } from "@techgens/core";
 import {
@@ -196,10 +199,10 @@ describe("generateAzureSetupScript", () => {
   });
 });
 
-/** Fake Azure CLI: logs each call to fd 3 and answers from FAKE_STATE ("fresh" or "existing"). */
+/** A file avoids Bash's platform-dependent handling of extra Node pipe descriptors on Windows. */
 const FAKE_AZ = String.raw`
 az() {
-  printf 'AZ %s\n' "$*" >&3
+  printf 'AZ %s\n' "$*" >> "$FAKE_AZ_LOG"
   case "$*" in
     "account show --output none") ;;
     "account show --query id --output tsv") echo 99999999-9999-9999-9999-999999999999 ;;
@@ -227,22 +230,31 @@ bash -s
 `;
 
 function runWithFakeAz(script: string, state: "fresh" | "existing", env: Record<string, string> = {}) {
-  const result = spawnSync("bash", ["-c", FAKE_AZ], {
-    input: script,
-    encoding: "utf8",
-    stdio: ["pipe", "pipe", "pipe", "pipe"],
-    env: {
-      PATH: process.env.PATH ?? "/usr/bin:/bin",
-      FAKE_STATE: state,
-      FAKE_TENANT: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-      ...env,
-    },
-  });
-  const calls = String(result.output[3] ?? "")
-    .split("\n")
-    .filter((line) => line.startsWith("AZ "))
-    .map((line) => line.slice(3));
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr, calls };
+  const directory = mkdtempSync(join(tmpdir(), "techgens-fake-az-"));
+  const log = join(directory, "az-calls.log");
+  writeFileSync(log, "");
+  try {
+    const result = spawnSync("bash", ["-c", FAKE_AZ], {
+      cwd: directory,
+      input: script,
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH ?? "/usr/bin:/bin",
+        FAKE_AZ_LOG: "az-calls.log",
+        FAKE_STATE: state,
+        FAKE_TENANT: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        ...env,
+      },
+    });
+    if (result.error) throw result.error;
+    const calls = readFileSync(log, "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("AZ "))
+      .map((line) => line.slice(3));
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr, calls };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 describe("setup script behaviour (fake az)", () => {

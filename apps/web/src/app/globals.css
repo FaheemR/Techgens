@@ -1,31 +1,82 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #070b12;
-  --color-surface: #0c121c;
-  --color-surface-2: #111a27;
-  --color-surface-3: #172233;
+  --color-bg: #171e28;
+  --color-surface: #1d2633;
+  --color-surface-2: #232e3d;
+  --color-surface-3: #2c394b;
+  --color-surface-hover: #303e52;
+  --color-field: #1b2532;
+  --color-code: #19222e;
   /* Card, column and divider borders are decorative, so they stay subtle. */
-  --color-border: #1e2a3b;
-  --color-border-strong: #2c3d55;
+  --color-border: #354255;
+  --color-border-strong: #485b72;
   /* Boundaries that identify a control or a measure — input/select/textarea borders, switch tracks and the empty part
-     of progress & stage bars — need ≥ 3:1 against the page, cards and field fills (WCAG 1.4.11): #5a6c87 is ~3.5:1. */
-  --color-control: #5a6c87;
-  --color-fg: #e5edf7;
-  --color-muted: #9aa8bc;
-  --color-subtle: #7d8ca3;
-  --color-accent: #22d3ee;
-  --color-accent-strong: #06b6d4;
-  --color-accent-fg: #03141a;
-  /* Solid destructive fill (danger buttons, notification count): white text on it is 4.7:1 (rose-500 is only 3.75:1). */
-  --color-danger: #e11d48;
-  --color-danger-strong: #be123c;
+     of progress & stage bars — need ≥ 3:1 against all surfaces, including hovered controls (WCAG 1.4.11). */
+  --color-control: #8192aa;
+  --color-fg: #dde3eb;
+  --color-muted: #aab6c6;
+  --color-subtle: #9eacbf;
+  --color-accent: #a5b9d5;
+  --color-accent-strong: #8fa9cb;
+  --color-accent-hover: #bfd0e5;
+  --color-accent-fg: #18283e;
+  /* White text on the restrained destructive fill remains above 4.5:1. */
+  --color-danger: #ae4f64;
+  --color-danger-strong: #993e53;
+
+  /* Shared status and department colours retain their meanings without neon saturation. */
+  --color-slate-300: #c4cedc;
+  --color-slate-400: #9aaabd;
+  --color-slate-500: #7e90a7;
+  --color-sky-200: #c2d3e4;
+  --color-sky-300: #a8c0d8;
+  --color-sky-400: #89aacb;
+  --color-sky-500: #7398bd;
+  --color-blue-300: #aac2de;
+  --color-blue-400: #90accc;
+  --color-emerald-200: #c0d9ce;
+  --color-emerald-300: #a4c6b5;
+  --color-emerald-400: #87b49d;
+  --color-emerald-500: #6b9b84;
+  --color-emerald-950: #142b23;
+  --color-amber-100: #eee2cb;
+  --color-amber-200: #dfccaa;
+  --color-amber-300: #d4ba91;
+  --color-amber-400: #c4a471;
+  --color-amber-500: #b18c52;
+  --color-amber-950: #2d2418;
+  --color-rose-100: #efd6dd;
+  --color-rose-200: #dfb7c3;
+  --color-rose-300: #d2a0af;
+  --color-rose-400: #c08598;
+  --color-rose-500: #ad6c82;
+  --color-rose-600: #99566d;
+  --color-violet-200: #d8d1e4;
+  --color-violet-300: #beb1cf;
+  --color-violet-400: #a292b9;
+  --color-violet-500: #8b7aa3;
+  --color-orange-300: #d4b69c;
+  --color-orange-400: #c39d7d;
+  --color-orange-500: #ae8768;
+  --color-red-300: #d6aaa8;
+  --color-red-400: #c48f8c;
+  --color-pink-300: #d6b1c6;
+  --color-pink-400: #c499b2;
+  --color-teal-300: #a7cac6;
+  --color-teal-400: #8db5b0;
+  --color-fuchsia-300: #ccb2d2;
+  --color-fuchsia-400: #b898c0;
+  --color-lime-300: #c1cbaa;
+  --color-lime-400: #a6b58c;
+  --color-yellow-300: #d7c899;
+  --color-yellow-400: #c4b77d;
   /*
    * Semantic colour rules (tones live in lib/labels.ts; keep one meaning per colour):
    * - rose: errors, failures and destructive actions only — never neutral facts such as the production environment.
    * - amber: needs attention — waiting on the CEO, warnings, budgets past their warn threshold.
    * - emerald: success, healthy, done.
-   * - cyan (accent): primary actions, live and in-progress work.
+   * - dusty blue (accent): primary actions, live and in-progress work.
    * - sky / slate: informational labels such as environments, kinds and counts.
    * - violet: proposals and gates awaiting a lifecycle decision.
    */
@@ -115,7 +166,7 @@
     outline-offset: 2px;
   }
   dialog::backdrop {
-    background-color: rgb(2 6 12 / 0.72);
+    background-color: rgb(17 24 34 / 0.64);
     backdrop-filter: blur(2px);
   }
   input[type="number"]::-webkit-inner-spin-button {
@@ -124,14 +175,6 @@
   input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(0.8);
   }
-}
-
-/* Subtle grid backdrop for the "mission control" feel. */
-.bg-grid {
-  background-image:
-    linear-gradient(to right, rgb(255 255 255 / 0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.025) 1px, transparent 1px);
-  background-size: 32px 32px;
 }
 
 /* Empty part of progress and stage bars: a dark fill keeps the coloured value prominent, the ≥ 3:1 inset outline
@@ -151,6 +194,12 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.markdown.decision-prose {
+  font-size: 1rem;
+  line-height: 1.65;
+  max-width: 70ch;
 }
 
 /* Rendered Markdown (PRDs, specs, summaries, chat replies). */
@@ -173,7 +222,7 @@
   & h4,
   & h5,
   & h6 {
-    color: #f4f8fd;
+    color: var(--color-fg);
     font-weight: 600;
     line-height: 1.3;
     margin: 1.5em 0 0.6em;
@@ -244,7 +293,7 @@
     text-decoration-color: var(--color-accent);
   }
   & strong {
-    color: #f4f8fd;
+    color: var(--color-fg);
     font-weight: 600;
   }
   & blockquote {
@@ -266,7 +315,7 @@
     padding: 0.1em 0.35em;
   }
   & pre {
-    background: #060a10;
+    background: var(--color-code);
     border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 0.85em 1em;

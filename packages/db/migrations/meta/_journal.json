@@ -15,6 +15,13 @@
       "when": 1793706361268,
       "tag": "0001_initiative_status_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793812659103,
+      "tag": "0002_curly_karen_page",
+      "breakpoints": true
     }
   ]
 }

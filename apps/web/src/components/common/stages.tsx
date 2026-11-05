@@ -84,7 +84,7 @@ const STATE_STYLES: Record<
   },
   active: {
     icon: CircleDot,
-    ring: "border-accent/60 bg-accent/15 text-accent shadow-[0_0_18px_-4px_rgba(34,211,238,0.7)]",
+    ring: "border-accent/60 bg-accent/15 text-accent",
     text: "text-fg",
     label: "In progress",
   },
@@ -96,7 +96,7 @@ const STATE_STYLES: Record<
   },
   skipped: {
     icon: CircleDashed,
-    ring: "border-border bg-transparent text-subtle/70",
+    ring: "border-border bg-transparent text-subtle",
     text: "text-subtle line-through",
     label: "Skipped",
   },
@@ -108,32 +108,32 @@ export type GateState =
 const GATE_STYLES: Record<GateState, { icon: LucideIcon; badge: string; text: string; label: string }> = {
   approved: {
     icon: ShieldCheck,
-    badge: "border-emerald-400/50 bg-[#06190f] text-emerald-300",
+    badge: "border-emerald-400/50 bg-surface-2 text-emerald-300",
     text: "text-emerald-300/90",
     label: "Approved",
   },
   waiting: {
     icon: ShieldAlert,
-    badge: "border-amber-400/60 bg-[#1b1608] text-amber-300 motion-safe:animate-pulse",
+    badge: "border-amber-400/60 bg-surface-2 text-amber-300",
     text: "text-amber-300",
     label: "Waiting on you",
   },
   revision: {
     icon: ShieldAlert,
-    badge: "border-sky-400/50 bg-[#071824] text-sky-300",
+    badge: "border-sky-400/50 bg-surface-2 text-sky-300",
     text: "text-sky-300/90",
     label: "In revision",
   },
   rejected: {
     icon: ShieldX,
-    badge: "border-rose-400/50 bg-[#1d0a10] text-rose-300",
+    badge: "border-rose-400/50 bg-surface-2 text-rose-300",
     text: "text-rose-300/90",
     label: "Rejected",
   },
   withdrawn: {
     icon: Shield,
-    badge: "border-border bg-surface text-subtle/70",
-    text: "text-subtle/70",
+    badge: "border-border bg-surface text-subtle",
+    text: "text-subtle",
     label: "Withdrawn",
   },
   upcoming: {
@@ -144,8 +144,8 @@ const GATE_STYLES: Record<GateState, { icon: LucideIcon; badge: string; text: st
   },
   skipped: {
     icon: Shield,
-    badge: "border-border bg-surface text-subtle/70",
-    text: "text-subtle/70",
+    badge: "border-border bg-surface text-subtle",
+    text: "text-subtle",
     label: "Gate skipped",
   },
 };

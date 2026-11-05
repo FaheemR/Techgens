@@ -146,7 +146,7 @@ function IncidentsCard({ productNames }: { productNames: Map<string, string> }) 
                         {incident.details ? (
                           <details className="mt-1.5">
                             <summary className="cursor-pointer text-xs text-accent">Details</summary>
-                            <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-[#060a10] p-2 font-mono text-xs text-muted">
+                            <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-code p-2 font-mono text-xs text-muted">
                               {incident.details}
                             </pre>
                           </details>

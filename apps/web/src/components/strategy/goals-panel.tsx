@@ -28,6 +28,7 @@ interface GoalBody {
   parentId?: string | null;
   productId?: string | null;
   targetValue?: number | null;
+  startValue?: number | null;
   currentValue?: number | null;
   unit?: string | null;
   dueDate?: string | null;
@@ -283,7 +284,11 @@ function KeyResultRow({ kr, onEdit, onDelete }: { kr: GoalDTO; onEdit: () => voi
               </button>
             )}
           </div>
-          {kr.dueDate ? <p className="mt-1 text-xs text-subtle">Due {formatDate(kr.dueDate)}</p> : null}
+          <p className="mt-1 text-xs text-subtle">
+            Baseline: {formatGoalValue(kr.startValue ?? 0, kr.unit)}
+            {kr.startValue === null ? " (zero assumed; edit to set)" : ""}
+            {kr.dueDate ? ` · Due ${formatDate(kr.dueDate)}` : ""}
+          </p>
         </div>
         <div className="flex shrink-0 gap-0.5">
           <Button variant="ghost" size="icon-sm" aria-label={`Edit key result ${kr.title}`} onClick={onEdit}>
@@ -327,6 +332,7 @@ function GoalForm({ editing, onDone }: { editing: NonNullable<Editing>; onDone: 
   const [status, setStatus] = useState<GoalStatus>(goal?.status ?? "on_track");
   const [productId, setProductId] = useState(goal?.productId ?? "");
   const [target, setTarget] = useState(goal?.targetValue == null ? "" : String(goal.targetValue));
+  const [start, setStart] = useState(goal?.startValue == null ? "" : String(goal.startValue));
   const [current, setCurrent] = useState(goal?.currentValue == null ? "" : String(goal.currentValue));
   const [unit, setUnit] = useState(goal?.unit ?? "");
   const [dueDate, setDueDate] = useState(isoToDateInput(goal?.dueDate));
@@ -345,8 +351,10 @@ function GoalForm({ editing, onDone }: { editing: NonNullable<Editing>; onDone: 
 
   const toNumber = (v: string) => (v.trim() === "" ? null : Number(v));
   const targetNum = toNumber(target);
+  const startNum = toNumber(start);
   const currentNum = toNumber(current);
   const numbersInvalid =
+    (startNum !== null && !Number.isFinite(startNum)) ||
     (targetNum !== null && !Number.isFinite(targetNum)) ||
     (currentNum !== null && !Number.isFinite(currentNum));
 
@@ -365,6 +373,7 @@ function GoalForm({ editing, onDone }: { editing: NonNullable<Editing>; onDone: 
     if (editing.mode === "create" && editing.parentId) body.parentId = editing.parentId;
     if (type === "key_result" || targetNum !== null || currentNum !== null) {
       body.targetValue = targetNum;
+      body.startValue = startNum;
       body.currentValue = currentNum;
       body.unit = unit.trim() || null;
     }
@@ -400,7 +409,21 @@ function GoalForm({ editing, onDone }: { editing: NonNullable<Editing>; onDone: 
         />
       </Field>
       {type === "key_result" ? (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Baseline"
+            htmlFor="goal-start"
+            hint="Starting value. Blank uses zero for existing goals."
+          >
+            <Input
+              id="goal-start"
+              type="number"
+              step="any"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              placeholder="0"
+            />
+          </Field>
           <Field label="Current" htmlFor="goal-current">
             <Input
               id="goal-current"

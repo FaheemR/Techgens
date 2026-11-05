@@ -63,19 +63,29 @@ export class JobEngine {
   ) {}
 
   async createJob(input: CreateJobInput): Promise<Job> {
-    const [job] = await this.app.db
-      .insert(schema.jobs)
-      .values({
-        agentId: input.agentId,
-        prompt: input.prompt,
-        workItemId: input.workItemId ?? null,
-        initiativeId: input.initiativeId ?? null,
-        parentJobId: input.parentJobId ?? null,
-        kind: input.kind ?? "work",
-        depth: input.depth ?? 0,
-        threadId: input.threadId ?? null,
-      })
-      .returning();
+    const job = await this.app.db.transaction(async (tx) => {
+      const [agent] = await tx
+        .select()
+        .from(schema.agents)
+        .where(eq(schema.agents.id, input.agentId))
+        .for("update");
+      if (!agent || agent.status === "retired")
+        throw new DomainError("Cannot assign a job to a retired or missing agent.", "conflict");
+      const [created] = await tx
+        .insert(schema.jobs)
+        .values({
+          agentId: input.agentId,
+          prompt: input.prompt,
+          workItemId: input.workItemId ?? null,
+          initiativeId: input.initiativeId ?? null,
+          parentJobId: input.parentJobId ?? null,
+          kind: input.kind ?? "work",
+          depth: input.depth ?? 0,
+          threadId: input.threadId ?? null,
+        })
+        .returning();
+      return created!;
+    });
     await this.emit(job!, "job.queued", `Assignment queued`);
     await this.dispatcher.enqueue(job!.id);
     return job!;
@@ -241,6 +251,10 @@ export class JobEngine {
       const suggested = Math.max(10, Math.round(limit * 0.5));
       const windowEnd = windowEndText(budget.period, budget.windowEndsAt);
       const payload: BudgetOverrunPayload = {
+        risk: `Granting credits raises the enforced ${budget.scope} ${budget.period} cap and allows blocked jobs to resume. ${windowEnd ? `The extra grant expires at ${windowEnd}.` : "A total-budget grant does not expire."} Other budget caps still apply; a grant does not guarantee completion.`,
+        recommendation:
+          "Review spend by agent and the remaining work before granting the smallest useful amount. The suggested amount is a heuristic, not a forecast of the credits needed to finish.",
+        spendByAgent: await this.app.budget.spendByAgent(budget),
         budgetId: budget.id,
         jobIds: [job.id],
         scope: budget.scope,

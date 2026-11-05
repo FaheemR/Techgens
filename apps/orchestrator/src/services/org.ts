@@ -1,5 +1,12 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { DomainError, type AgentDTO, type AgentDetailDTO, type RoleDTO, type RoleDefinition, type RoleFrontmatter } from "@techgens/core";
+import { and, asc, eq, inArray, notInArray, ne, sql } from "drizzle-orm";
+import {
+  DomainError,
+  type AgentDTO,
+  type AgentDetailDTO,
+  type RoleDTO,
+  type RoleDefinition,
+  type RoleFrontmatter,
+} from "@techgens/core";
 import type { PromptTeamMember } from "@techgens/agents";
 import { schema, type Agent, type Role } from "@techgens/db";
 import type { Techgens } from "../app";
@@ -67,25 +74,47 @@ export class OrgService {
   async resolveAgent(ref: string, options: { excludeAgentId?: string } = {}): Promise<Agent> {
     const needle = ref.trim().toLowerCase();
     const roles = await this.listRoles();
-    const agents = (await this.listAgentRows()).filter((a) => a.status === "active" && a.id !== options.excludeAgentId);
+    const agents = (await this.listAgentRows()).filter(
+      (a) => a.status === "active" && a.id !== options.excludeAgentId,
+    );
     const byName = agents.find((a) => a.name.toLowerCase() === needle);
     if (byName) return byName;
-    const role = roles.find((r) => r.id === needle || r.title.toLowerCase() === needle || r.id === needle.replace(/\s+/g, "-"));
-    if (!role) throw new DomainError(`No colleague matches "${ref}". Use a role id such as ${roles.map((r) => r.id).slice(0, 6).join(", ")}…`);
+    const role = roles.find(
+      (r) => r.id === needle || r.title.toLowerCase() === needle || r.id === needle.replace(/\s+/g, "-"),
+    );
+    if (!role)
+      throw new DomainError(
+        `No colleague matches "${ref}". Use a role id such as ${roles
+          .map((r) => r.id)
+          .slice(0, 6)
+          .join(", ")}…`,
+      );
     const candidates = agents.filter((a) => a.roleId === role.id);
     if (!candidates.length) throw new DomainError(`No active agent holds the ${role.title} role.`);
     if (candidates.length === 1) return candidates[0]!;
     const loads = await this.app.db
       .select({ agentId: schema.jobs.agentId, n: sql<number>`count(*)::int` })
       .from(schema.jobs)
-      .where(and(inArray(schema.jobs.agentId, candidates.map((c) => c.id)), inArray(schema.jobs.status, ["queued", "running", "waiting"])))
+      .where(
+        and(
+          inArray(
+            schema.jobs.agentId,
+            candidates.map((c) => c.id),
+          ),
+          inArray(schema.jobs.status, ["queued", "running", "waiting"]),
+        ),
+      )
       .groupBy(schema.jobs.agentId);
     const load = new Map(loads.map((l) => [l.agentId, l.n]));
     return [...candidates].sort((a, b) => (load.get(a.id) ?? 0) - (load.get(b.id) ?? 0))[0]!;
   }
 
   /** Manager / reports / colleagues for the system prompt. */
-  async teamContext(agent: Agent): Promise<{ manager: PromptTeamMember | null; reports: PromptTeamMember[]; colleagues: PromptTeamMember[] }> {
+  async teamContext(agent: Agent): Promise<{
+    manager: PromptTeamMember | null;
+    reports: PromptTeamMember[];
+    colleagues: PromptTeamMember[];
+  }> {
     const roles = new Map((await this.listRoles()).map((r) => [r.id, r]));
     const agents = (await this.listAgentRows()).filter((a) => a.status === "active");
     const member = (a: Agent): PromptTeamMember => {
@@ -110,10 +139,15 @@ export class OrgService {
     const agents = await this.listAgentRows();
     for (const agent of agents) {
       const role = roles.find((r) => r.id === agent.roleId);
-      const manager = role?.reportsTo ? agents.find((a) => a.roleId === role.reportsTo && a.status !== "retired") : undefined;
+      const manager = role?.reportsTo
+        ? agents.find((a) => a.roleId === role.reportsTo && a.status !== "retired")
+        : undefined;
       const managerId = manager?.id ?? null;
       if (agent.managerAgentId !== managerId) {
-        await this.app.db.update(schema.agents).set({ managerAgentId: managerId }).where(eq(schema.agents.id, agent.id));
+        await this.app.db
+          .update(schema.agents)
+          .set({ managerAgentId: managerId })
+          .where(eq(schema.agents.id, agent.id));
       }
     }
   }
@@ -128,32 +162,164 @@ export class OrgService {
       .returning();
     await this.app.budget.ensureAgentBudget(agent!.id, def.budget.dailyCredits);
     await this.relinkManagers();
-    await this.app.bus.emit({ type: "agent.updated", actorType: "ceo", subjectType: "agent", subjectId: agent!.id, summary: `Hired ${agent!.name} as ${role.title}` });
+    await this.app.bus.emit({
+      type: "agent.updated",
+      actorType: "ceo",
+      subjectType: "agent",
+      subjectId: agent!.id,
+      summary: `Hired ${agent!.name} as ${role.title}`,
+    });
     return agent!;
   }
 
-  async updateAgent(id: string, patch: { name?: string; status?: Agent["status"]; modelOverride?: string | null; dailyCreditsOverride?: number | null }): Promise<Agent> {
+  async updateAgent(
+    id: string,
+    input: {
+      name?: string;
+      status?: Agent["status"];
+      modelOverride?: string | null;
+      dailyCreditsOverride?: number | null;
+      replacementAgentId?: string;
+    },
+  ): Promise<Agent> {
+    const { replacementAgentId, ...patch } = input;
+    if (replacementAgentId && patch.status !== "retired")
+      throw new DomainError("A replacement can only be selected when retiring an agent.");
     const before = await this.getAgent(id);
-    const [agent] = await this.app.db.update(schema.agents).set({ ...patch, updatedAt: new Date() }).where(eq(schema.agents.id, id)).returning();
+    const agent = await this.app.db.transaction(async (tx) => {
+      if (before.roleId === "chief-of-staff" && patch.status) {
+        await tx
+          .select({ id: schema.roles.id })
+          .from(schema.roles)
+          .where(eq(schema.roles.id, before.roleId))
+          .for("update");
+      }
+      const locked = await tx
+        .select()
+        .from(schema.agents)
+        .where(inArray(schema.agents.id, replacementAgentId ? [id, replacementAgentId] : [id]))
+        .orderBy(asc(schema.agents.id))
+        .for("update");
+      const current = locked.find((agent) => agent.id === id);
+      if (!current) throw new DomainError("agent not found", "not_found");
+      if (patch.status === "retired" && current.status !== "retired") {
+        const [job] = await tx
+          .select({ id: schema.jobs.id })
+          .from(schema.jobs)
+          .where(
+            and(eq(schema.jobs.agentId, id), inArray(schema.jobs.status, ["queued", "running", "waiting"])),
+          )
+          .limit(1);
+        const [work] = await tx
+          .select({ id: schema.workItems.id })
+          .from(schema.workItems)
+          .where(
+            and(
+              eq(schema.workItems.assigneeAgentId, id),
+              notInArray(schema.workItems.status, ["done", "cancelled"]),
+            ),
+          )
+          .limit(1);
+        if (job)
+          throw new DomainError("Finish or cancel this agent's jobs before retiring them.", "conflict");
+        if (work && !replacementAgentId)
+          throw new DomainError(
+            "Choose an active replacement of the same role for unfinished work before retiring this agent.",
+            "conflict",
+          );
+        if (replacementAgentId) {
+          const replacement = locked.find(
+            (agent) =>
+              agent.id === replacementAgentId &&
+              agent.id !== id &&
+              agent.status === "active" &&
+              agent.roleId === current.roleId,
+          );
+          if (!replacement)
+            throw new DomainError(
+              "Choose a different active agent with the same role as the replacement.",
+              "conflict",
+            );
+          await tx
+            .update(schema.workItems)
+            .set({ assigneeAgentId: replacement.id, updatedAt: new Date() })
+            .where(
+              and(
+                eq(schema.workItems.assigneeAgentId, id),
+                notInArray(schema.workItems.status, ["done", "cancelled"]),
+              ),
+            );
+        }
+        if (current.roleId === "chief-of-staff") {
+          const [replacement] = await tx
+            .select({ id: schema.agents.id })
+            .from(schema.agents)
+            .where(
+              and(
+                eq(schema.agents.roleId, current.roleId),
+                ne(schema.agents.id, id),
+                eq(schema.agents.status, "active"),
+              ),
+            )
+            .limit(1);
+          if (!replacement)
+            throw new DomainError("Hire an active Chief of Staff before retiring the last one.", "conflict");
+        }
+      }
+      const [updated] = await tx
+        .update(schema.agents)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(eq(schema.agents.id, id))
+        .returning();
+      return updated!;
+    });
     if (patch.dailyCreditsOverride !== undefined) {
       const role = await this.getRole(agent!.roleId);
-      await this.app.budget.ensureAgentBudget(id, patch.dailyCreditsOverride ?? role.definition.budget.dailyCredits, true);
+      await this.app.budget.ensureAgentBudget(
+        id,
+        patch.dailyCreditsOverride ?? role.definition.budget.dailyCredits,
+        true,
+      );
     }
     if (patch.status && patch.status !== before.status) {
       if (patch.status === "active") await this.app.engine.requeueAgentJobs(id);
       if (patch.status === "retired") await this.relinkManagers();
     }
-    await this.app.bus.emit({ type: "agent.updated", actorType: "ceo", subjectType: "agent", subjectId: id, summary: `${agent!.name} updated` });
-    return agent!;
+    await this.app.bus.emit({
+      type: "agent.updated",
+      actorType: "ceo",
+      subjectType: "agent",
+      subjectId: id,
+      summary:
+        patch.status === "retired"
+          ? `${agent.name} retired; history retained${replacementAgentId ? "; unfinished work reassigned to the selected replacement" : ""}`
+          : `${agent.name} updated`,
+      data: replacementAgentId ? { replacementAgentId } : {},
+    });
+    return agent;
   }
 
-  async updateRole(id: string, patch: Partial<Pick<RoleFrontmatter, "model" | "reasoningEffort" | "tools" | "budget" | "description" | "responsibilities">> & { prompt?: string }): Promise<Role> {
+  async updateRole(
+    id: string,
+    patch: Partial<
+      Pick<
+        RoleFrontmatter,
+        "model" | "reasoningEffort" | "tools" | "budget" | "description" | "responsibilities"
+      >
+    > & { prompt?: string },
+  ): Promise<Role> {
     const role = await this.getRole(id);
     const { prompt, ...defPatch } = patch;
     const definition = { ...role.definition, ...defPatch };
     const [row] = await this.app.db
       .update(schema.roles)
-      .set({ definition, prompt: prompt ?? role.prompt, description: definition.description, source: "customized", updatedAt: new Date() })
+      .set({
+        definition,
+        prompt: prompt ?? role.prompt,
+        description: definition.description,
+        source: "customized",
+        updatedAt: new Date(),
+      })
       .where(eq(schema.roles.id, id))
       .returning();
     return row!;
@@ -192,7 +358,8 @@ export class OrgService {
         dailyBudgetCredits: budgets.get(a.id) ?? role.definition.budget.dailyCredits,
         spentTodayCredits: spent.get(a.id) ?? 0,
         activeJobs: mine.length,
-        currentActivity: running?.title ?? (mine[0] ? `${mine[0].status}: ${mine[0].title ?? "assignment"}` : null),
+        currentActivity:
+          running?.title ?? (mine[0] ? `${mine[0].status}: ${mine[0].title ?? "assignment"}` : null),
       };
     });
   }

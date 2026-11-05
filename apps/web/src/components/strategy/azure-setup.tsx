@@ -337,7 +337,7 @@ export function AzureSetupView({ setup, fileName }: { setup: AzureSetupDTO; file
             </Button>
           </div>
         </div>
-        <pre className="max-h-[28rem] overflow-auto bg-[#060a10] p-3 font-mono text-xs leading-relaxed text-slate-200">
+        <pre className="max-h-[28rem] overflow-auto bg-code p-3 font-mono text-xs leading-relaxed text-fg">
           {setup.script}
         </pre>
       </div>

@@ -44,6 +44,7 @@ export function registerCompanyRoutes(server: FastifyInstance, app: Techgens): v
     productId: z.string().uuid().nullable().optional(),
     initiativeId: z.string().uuid().nullable().optional(),
     targetValue: z.number().nullable().optional(),
+    startValue: z.number().nullable().optional(),
     currentValue: z.number().nullable().optional(),
     unit: z.string().nullable().optional(),
     dueDate: z.string().nullable().optional(),
@@ -185,6 +186,15 @@ export function registerCompanyRoutes(server: FastifyInstance, app: Techgens): v
     app.chat.createThread(parse(z.object({ title: z.string().optional() }), req.body).title),
   );
   server.get("/api/chat/threads/:id/messages", async (req) => app.chat.messages(parse(id, req.params).id));
+  server.patch("/api/chat/threads/:id", async (req) =>
+    app.chat.updateThread(
+      parse(id, req.params).id,
+      parse(
+        z.object({ title: z.string().trim().min(1).max(160).optional(), archived: z.boolean().optional() }),
+        req.body,
+      ),
+    ),
+  );
   server.post("/api/chat/threads/:id/messages", async (req) =>
     app.chat.postCeoMessage(
       parse(id, req.params).id,
@@ -210,6 +220,7 @@ export function registerCompanyRoutes(server: FastifyInstance, app: Techgens): v
         status: z.enum(AGENT_STATUSES).optional(),
         modelOverride: z.string().nullable().optional(),
         dailyCreditsOverride: z.number().nonnegative().nullable().optional(),
+        replacementAgentId: z.string().uuid().optional(),
       }),
       req.body,
     );

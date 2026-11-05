@@ -33,19 +33,20 @@ export function invalidationRoots(type: string): string[] {
   if (type.startsWith("approval.")) return ["approvals", "dashboard", "initiatives", "notifications"];
   if (type.startsWith("job.")) return ["jobs", "org", "agents", "dashboard", "work-items"];
   if (type.startsWith("initiative.")) return ["initiatives", "dashboard", "notifications"];
-  if (type.startsWith("work_item.")) return ["work-items", "initiatives"];
+  if (type.startsWith("work_item.")) return ["work-items", "initiatives", "dashboard"];
   if (type === "document.written") return ["documents", "initiatives", "approvals"];
   if (type === "decision.recorded") return ["decisions", "initiatives"];
   if (type === "usage.recorded" || type.startsWith("budget."))
     return ["usage", "budgets", "dashboard", "org", "agents", "jobs"];
-  if (type === "agent.updated") return ["org", "agents"];
+  if (type === "agent.updated") return ["org", "agents", "work-items", "dashboard"];
   if (type === "notification.created") return ["notifications"];
-  if (type === "chat.message" || type === "directive.received") return ["chat", "initiatives"];
+  if (type === "chat.message" || type === "directive.received") return ["chat", "initiatives", "dashboard"];
   if (type.startsWith("system.")) return ["system"];
   if (type === "company.updated") return ["company", "dashboard", "goals", "products"];
-  if (type === "deployment.updated") return ["deployments", "initiatives"];
+  if (type === "deployment.updated") return ["deployments", "initiatives", "dashboard"];
   if (type === "incident.opened") return ["incidents", "dashboard"];
-  if (type.startsWith("github.")) return ["work-items", "products", "deployments", "initiatives"];
+  if (type.startsWith("github."))
+    return ["work-items", "products", "deployments", "initiatives", "dashboard"];
   return [];
 }
 

@@ -113,7 +113,6 @@ function CompanyForm({ company }: { company: CompanyDTO }) {
       policies: draft.policies,
       githubOwner: draft.githubOwner.trim() || null,
       // Saving the constitution completes onboarding (hides the dashboard setup callout).
-      onboarded: true,
     });
   }
 
@@ -156,11 +155,11 @@ function CompanyForm({ company }: { company: CompanyDTO }) {
               htmlFor="co-values"
               hint="Press Enter to add. Agents weigh trade-offs against these."
             >
-              <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-control bg-[#0a1019] p-1.5 hover:border-subtle focus-within:border-accent/70">
+              <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-control bg-field p-1.5 hover:border-subtle focus-within:border-accent">
                 {draft.values.map((value) => (
                   <span
                     key={value}
-                    className="inline-flex items-center gap-1 rounded-md border border-accent/25 bg-accent/10 py-0.5 pl-2 pr-1 text-xs text-cyan-100"
+                    className="inline-flex items-center gap-1 rounded-md border border-accent/25 bg-accent/10 py-0.5 pl-2 pr-1 text-xs text-accent"
                   >
                     {value}
                     <button
@@ -172,7 +171,7 @@ function CompanyForm({ company }: { company: CompanyDTO }) {
                         )
                       }
                       // A 24×24 target (WCAG 2.5.8) around the 16px icon; negative margins keep the chip compact.
-                      className="group/remove -my-1 -mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded text-cyan-200/70 hover:text-fg"
+                      className="group/remove -my-1 -mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded text-accent hover:text-fg"
                       aria-label={`Remove value ${value}`}
                     >
                       <span aria-hidden className="rounded p-0.5 group-hover/remove:bg-white/10">

@@ -137,6 +137,22 @@ export class BudgetService {
     return Number(row?.total ?? 0);
   }
 
+  async spendByAgent(budget: BudgetDTO): Promise<Array<{ agentName: string; credits: number }>> {
+    const rows = await this.app.db
+      .select({ name: schema.agents.name, total: sql<string>`sum(${l.nanoAiu})` })
+      .from(l)
+      .leftJoin(schema.agents, eq(l.agentId, schema.agents.id))
+      .where(
+        and(this.scopeCondition(budget.scope, budget.scopeId), gte(l.createdAt, periodStart(budget.period))),
+      )
+      .groupBy(l.agentId, schema.agents.name)
+      .orderBy(desc(sql`sum(${l.nanoAiu})`));
+    return rows.map((row) => ({
+      agentName: row.name ?? "Unattributed usage",
+      credits: nanoToCredits(Number(row.total)),
+    }));
+  }
+
   private async extraCredits(budgetId: string, start: Date): Promise<number> {
     const rows = await this.app.db
       .select({ extra: schema.budgetAlerts.extraCredits })
