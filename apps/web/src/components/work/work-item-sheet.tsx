@@ -139,7 +139,7 @@ export function WorkItemSheet({
                 </Meta>
                 <Meta label="Executor">
                   {detail.forCodingAgent ? (
-                    <span className="inline-flex items-center gap-1 text-cyan-200">
+                    <span className="inline-flex items-center gap-1 text-accent">
                       <Bot aria-hidden className="size-3.5" /> Copilot coding agent
                     </span>
                   ) : (

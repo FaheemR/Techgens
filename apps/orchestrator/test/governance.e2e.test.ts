@@ -260,6 +260,10 @@ describe("governance: budget grants and notifications", () => {
       limitCredits: 0.000001,
       grantedCredits: 0,
       suggestedExtraCredits: 10,
+      risk: "Granting credits raises the enforced company day cap and allows blocked jobs to resume. The extra grant expires at 00:00 UTC. Other budget caps still apply; a grant does not guarantee completion.",
+      recommendation:
+        "Review spend by agent and the remaining work before granting the smallest useful amount. The suggested amount is a heuristic, not a forecast of the credits needed to finish.",
+      spendByAgent: [{ agentName: "Unattributed usage", credits: 0.000005 }],
     });
     expect(payload.jobIds).toHaveLength(1);
     expect(payload.spentCredits).toBeGreaterThan(0);

@@ -26,7 +26,7 @@ export function AgentAvatar({
     <span
       aria-hidden
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-[#06101a]",
+        "relative inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-accent-fg",
         sizes[size],
         className,
       )}
@@ -34,7 +34,7 @@ export function AgentAvatar({
     >
       {initials(name)}
       {cloud ? (
-        <span className="absolute -bottom-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full border border-surface bg-[#0d1a2b]">
+        <span className="absolute -bottom-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full border border-surface bg-field">
           <Bot className="size-2.5 text-accent" />
         </span>
       ) : null}
@@ -48,11 +48,11 @@ export function CeoAvatar({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
     <span
       aria-hidden
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-500",
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-amber-300",
         sizes[size],
       )}
     >
-      <Crown className="size-1/2 text-[#1a0f02]" />
+      <Crown className="size-1/2 text-amber-950" />
     </span>
   );
 }

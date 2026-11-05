@@ -211,7 +211,7 @@ function WorkCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={cn(
-        "group relative cursor-grab rounded-lg border border-border bg-[#0e1622] p-3 shadow-sm transition-colors hover:border-border-strong active:cursor-grabbing",
+        "group relative cursor-grab rounded-lg border border-border bg-surface p-3 shadow-sm transition-colors hover:border-border-strong active:cursor-grabbing",
         dragging && "opacity-40",
         item.status === "blocked" && "border-rose-400/30",
       )}
@@ -221,7 +221,7 @@ function WorkCard({
         <span>{humanize(item.kind)}</span>
         {item.forCodingAgent ? (
           <span
-            className="inline-flex items-center gap-0.5 text-cyan-300"
+            className="inline-flex items-center gap-0.5 text-accent"
             title="Implemented by the Copilot coding agent"
           >
             <Bot aria-hidden className="size-3" /> coding agent

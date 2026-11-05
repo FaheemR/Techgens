@@ -172,6 +172,7 @@ export const threads = pgTable("threads", {
   id: uuid("id").primaryKey().defaultRandom(),
   kind: text("kind").$type<"directive" | "work_item" | "meeting">().notNull().default("directive"),
   title: text("title").notNull(),
+  archived: boolean("archived").notNull().default(false),
   agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
   sessionId: text("session_id"),
   createdAt: createdAt(),
@@ -223,4 +224,3 @@ export const memories = pgTable(
   },
   (t) => [index("memories_agent_idx").on(t.agentId, t.createdAt)],
 );
-

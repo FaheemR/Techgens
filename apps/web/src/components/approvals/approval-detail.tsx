@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type Ref,
-  type RefObject,
-} from "react";
+import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
 import Link from "next/link";
 import type { ApprovalDetailDTO, ApprovalOutcome, DecideApprovalRequest, DocumentDTO } from "@techgens/core";
 import { GATE_LABELS } from "@techgens/core";
@@ -19,7 +11,6 @@ import {
   Coins,
   ExternalLink,
   FileText,
-  History,
   MessageSquareWarning,
   Rocket,
   Target,
@@ -36,7 +27,7 @@ import { LoadingBlock } from "@/components/ui/spinner";
 import { Tabs } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { formatDateTime, relativeTime } from "@/lib/format";
-import { useMediaQuery, useNow } from "@/lib/hooks";
+import { useNow } from "@/lib/hooks";
 import {
   APPROVAL_INTENT,
   APPROVAL_STATUS_TONE,
@@ -53,6 +44,7 @@ import { asString, cn, isRecord } from "@/lib/utils";
 import { grantConsequence, overrunScopeLabel, parseCreditsInput, readOverrun } from "./budget-grant";
 import { FOCUS_FLASH_OUTLINE, focusWithFlash } from "./focus-flash";
 import { PayloadDetails } from "./payload-details";
+import { DecisionBrief } from "./decision-brief";
 
 /** Called after a decision is recorded; `grantedCredits` is the amount sent for a budget grant. */
 export type OnDecided = (
@@ -70,14 +62,14 @@ export function ApprovalDetailPane({
   id: string;
   onDecided: OnDecided;
   onBack: () => void;
-  /** Returns true (once) when the heading should receive focus, e.g. after a decision advanced the inbox. */
+  /** Returns true once when the user explicitly opens a review or recorded decision. */
   takeFocus: () => boolean;
 }) {
   const query = useApproval(id);
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-border px-4 py-2 lg:hidden">
-        <Button variant="ghost" size="sm" onClick={onBack}>
+    <div className="flex min-w-0 flex-col">
+      <div className="border-b border-border px-4 py-2">
+        <Button variant="ghost" size="lg" onClick={onBack}>
           <ArrowLeft />
           Back to inbox
         </Button>
@@ -152,8 +144,8 @@ function ApprovalDetail({
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="space-y-6 px-5 py-5">
+      <div>
+        <div className="space-y-8 px-5 py-6 sm:px-8 sm:py-8">
           <header>
             <div className="flex flex-wrap items-center gap-2">
               <ApprovalKindBadge kind={approval.kind} />
@@ -163,7 +155,10 @@ function ApprovalDetail({
             <h2
               ref={headingRef}
               tabIndex={-1}
-              className={cn("mt-2 rounded-sm text-xl font-semibold leading-snug", FOCUS_FLASH_OUTLINE)}
+              className={cn(
+                "mt-3 break-words rounded-sm text-2xl font-semibold leading-snug",
+                FOCUS_FLASH_OUTLINE,
+              )}
             >
               <span className="sr-only">{GATE_LABELS[approval.kind] ?? approval.kind}: </span>
               {approvalDisplayTitle(approval.kind, approval.title)}
@@ -189,7 +184,7 @@ function ApprovalDetail({
               <span title={formatDateTime(approval.createdAt)}>{relativeTime(approval.createdAt, now)}</span>
             </p>
             {intent ? (
-              <p className="mt-3 flex items-start gap-2 rounded-lg border border-accent/20 bg-accent/[0.05] px-3 py-2 text-sm">
+              <p className="mt-4 flex items-start gap-2 rounded-lg border border-accent/20 bg-accent/[0.05] px-4 py-3 text-base leading-relaxed">
                 <Target aria-hidden className="mt-0.5 size-4 shrink-0 text-accent" />
                 <span>
                   <span className="font-medium text-fg">What you&apos;re approving: </span>
@@ -205,43 +200,43 @@ function ApprovalDetail({
             ) : null}
           </header>
 
+          <DecisionBrief approval={approval} />
+
           {approval.summary.trim() ? (
-            <section aria-labelledby="approval-summary">
-              <h3
-                id="approval-summary"
-                className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle"
-              >
-                Summary
-              </h3>
-              <div className="rounded-lg border border-border bg-surface-2/50 p-4">
-                <MarkdownView content={approval.summary} headingOffset={3} />
+            <details className="border-t border-border pt-4">
+              <summary className="cursor-pointer py-3 text-base font-semibold">Full request summary</summary>
+              <div className="mt-4 max-w-[70ch]">
+                <MarkdownView content={approval.summary} className="decision-prose" headingOffset={2} />
               </div>
-            </section>
+            </details>
           ) : null}
 
           {Object.keys(approval.payload ?? {}).length > 0 ? (
             <section aria-labelledby="approval-details">
-              <h3
-                id="approval-details"
-                className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle"
-              >
+              <h3 id="approval-details" className="mb-3 text-lg font-semibold">
                 Details
               </h3>
               <PayloadDetails kind={approval.kind} payload={approval.payload} />
             </section>
           ) : null}
 
-          {approval.documents.length > 0 ? <AttachedDocuments documents={approval.documents} /> : null}
+          {approval.documents.length > 0 ? (
+            <details className="border-t border-border pt-4">
+              <summary className="cursor-pointer py-3 text-base font-semibold">
+                Source documents ({approval.documents.length})
+              </summary>
+              <div className="mt-4">
+                <AttachedDocuments documents={approval.documents} />
+              </div>
+            </details>
+          ) : null}
 
           {approval.decisions.length > 0 ? (
-            <section aria-labelledby="approval-history">
-              <h3
-                id="approval-history"
-                className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-subtle"
-              >
-                <History aria-hidden className="size-3.5" /> Decision history
-              </h3>
-              <ol className="space-y-2">
+            <details className="border-t border-border pt-4">
+              <summary className="cursor-pointer py-3 text-base font-semibold">
+                Decision history ({approval.decisions.length})
+              </summary>
+              <ol className="mt-4 space-y-3">
                 {approval.decisions.map((d, i) => (
                   <li
                     key={`${d.createdAt}-${i}`}
@@ -261,7 +256,7 @@ function ApprovalDetail({
                   </li>
                 ))}
               </ol>
-            </section>
+            </details>
           ) : null}
         </div>
       </div>
@@ -284,7 +279,7 @@ function AttachedDocuments({ documents }: { documents: DocumentDTO[] }) {
       </h3>
       {documents.length > 1 ? (
         <Tabs
-          tabs={documents.map((d) => ({ id: d.id, label: d.title }))}
+          tabs={documents.map((d) => ({ id: d.id, label: `${documentKindLabel(d.kind)} · v${d.version}` }))}
           value={doc.id}
           onChange={setActive}
           idBase="approval-doc"
@@ -300,19 +295,26 @@ function AttachedDocuments({ documents }: { documents: DocumentDTO[] }) {
         className="rounded-lg border border-border"
       >
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2/60 px-4 py-2.5">
-          <p className="min-w-0 flex-1 truncate text-sm font-medium">{doc.title}</p>
+          <p className="min-w-0 flex-1 whitespace-normal break-words text-sm font-medium" title={doc.title}>
+            {doc.title}
+          </p>
           <Badge>{documentKindLabel(doc.kind)}</Badge>
           <Badge tone="info">v{doc.version}</Badge>
           <Link
             href={`/documents/${doc.id}`}
-            className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+            className="inline-flex min-h-11 min-w-11 items-center gap-1 text-sm text-accent hover:underline"
           >
             <ExternalLink aria-hidden className="size-3" /> Open
           </Link>
         </div>
         <div className="p-4 sm:p-5">
           {doc.content.trim() ? (
-            <MarkdownView content={doc.content} headingOffset={3} dropTitle={doc.title} />
+            <MarkdownView
+              content={doc.content}
+              className="decision-prose"
+              headingOffset={2}
+              dropTitle={doc.title}
+            />
           ) : (
             <p className="text-sm text-subtle">This document is empty.</p>
           )}
@@ -382,20 +384,12 @@ function BudgetGrantField({
 }
 
 function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onDecided: OnDecided }) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const extraRef = useRef<HTMLInputElement>(null);
   const isBudget = approval.kind === "budget_overrun";
-  // Compact bar on narrow panes (phones, small laptops) and short viewports (< 800 px tall), so the brief stays
-  // readable: one-line comment that expands on focus, inline hint, one row of buttons.
-  const narrow = useNarrowerThan(rootRef, 448);
-  const shortViewport = useMediaQuery("(max-height: 799.98px)");
-  const compact = narrow || shortViewport;
-
   const [error, setError] = useState<string | null>(null);
   const [extraError, setExtraError] = useState<string | null>(null);
-  const [hasComment, setHasComment] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
 
   const decide = useApiMutation(
@@ -432,7 +426,6 @@ function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onD
   function submit(outcome: ApprovalOutcome, confirmed = false) {
     if (decide.isPending) return;
     const { comment, extra } = readForm();
-    setHasComment(comment.length > 0);
     setError(null);
     setExtraError(null);
     if (outcome !== "approved" && !comment) {
@@ -474,15 +467,7 @@ function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onD
   const stageGate = Boolean(approval.initiativeId) && STAGE_GATE_KINDS.includes(approval.kind);
 
   return (
-    <div
-      ref={rootRef}
-      data-compact={compact || undefined}
-      className={cn(
-        "@container border-t border-border bg-surface-2/80 px-4 py-3 backdrop-blur",
-        !compact && "sm:px-5 sm:py-4",
-        compact && "sm:px-5",
-      )}
-    >
+    <div className="@container border-t border-border bg-surface-2 px-5 py-5 sm:px-8 sm:py-6">
       <form ref={formRef} onSubmit={onSubmit} noValidate aria-label="Your decision">
         <div className={cn("grid gap-3", isBudget && "@lg:grid-cols-[15rem_minmax(0,1fr)]")}>
           {isBudget ? (
@@ -494,25 +479,12 @@ function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onD
             />
           ) : null}
           <Field
-            label={
-              compact ? (
-                <>
-                  Comment for the team{" "}
-                  <span className="text-xs font-normal text-subtle">
-                    · {isBudget ? "optional to grant, required to reject" : "optional to approve"}
-                  </span>
-                </>
-              ) : (
-                "Comment for the team"
-              )
-            }
+            label="Comment for the team"
             htmlFor="decision-comment"
             hint={
-              compact
-                ? undefined
-                : isBudget
-                  ? "Optional when granting; required to reject."
-                  : "Optional when approving; required to request changes or reject."
+              isBudget
+                ? "Optional when granting; required to reject."
+                : "Optional when approving; required to request changes or reject."
             }
             error={error ?? undefined}
           >
@@ -524,28 +496,18 @@ function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onD
               defaultValue=""
               onInput={(event) => {
                 const filled = event.currentTarget.value.trim().length > 0;
-                setHasComment(filled);
                 if (error && filled) setError(null);
               }}
               placeholder={DECISION_PLACEHOLDERS[approval.kind]}
               aria-invalid={Boolean(error)}
-              data-filled={hasComment || undefined}
-              className={cn(
-                "min-h-14",
-                compact && "h-9 min-h-9 resize-none py-1.5 focus:h-24 data-[filled]:h-24",
-              )}
+              className="min-h-24"
             />
           </Field>
         </div>
-        <div
-          className={cn(
-            "flex flex-wrap items-center justify-end gap-2",
-            compact ? "mt-2 flex-nowrap [&>button]:flex-1" : "mt-3",
-          )}
-        >
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
           <Button
             variant="outline"
-            className="border-rose-400/40 text-rose-200 hover:bg-rose-500/10"
+            className="min-h-11 border-rose-300/70 text-rose-200 hover:bg-rose-500/10"
             onClick={() => submit("rejected")}
             disabled={decide.isPending}
             loading={decide.isPending && decide.variables?.outcome === "rejected"}
@@ -556,7 +518,7 @@ function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onD
           {!isBudget ? (
             <Button
               variant="outline"
-              className="border-sky-400/40 text-sky-100 hover:bg-sky-400/10"
+              className="min-h-11 border-sky-300/70 text-sky-100 hover:bg-sky-400/10"
               onClick={() => submit("changes_requested")}
               loading={decide.isPending && decide.variables?.outcome === "changes_requested"}
               disabled={decide.isPending}
@@ -565,11 +527,12 @@ function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onD
               {decide.isPending && decide.variables?.outcome === "changes_requested" ? null : (
                 <MessageSquareWarning />
               )}
-              {narrow ? "Changes" : "Request changes"}
+              Request changes
             </Button>
           ) : null}
           <Button
             variant="success"
+            className="min-h-11"
             onClick={() => submit("approved")}
             loading={decide.isPending && decide.variables?.outcome === "approved"}
             disabled={decide.isPending}
@@ -591,10 +554,15 @@ function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onD
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirmReject(false)} data-autofocus>
+            <Button size="lg" variant="ghost" onClick={() => setConfirmReject(false)} data-autofocus>
               Go back
             </Button>
-            <Button variant="danger" onClick={() => submit("rejected", true)} loading={decide.isPending}>
+            <Button
+              size="lg"
+              variant="danger"
+              onClick={() => submit("rejected", true)}
+              loading={decide.isPending}
+            >
               Reject {kindLabel}
             </Button>
           </>
@@ -610,19 +578,4 @@ function DecisionBar({ approval, onDecided }: { approval: ApprovalDetailDTO; onD
       </Dialog>
     </div>
   );
-}
-
-/** Whether the element is narrower than `px` (tracks resizes). Measured before paint, so the layout doesn't jump. */
-function useNarrowerThan(ref: RefObject<HTMLElement | null>, px: number): boolean {
-  const [narrow, setNarrow] = useState(false);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => setNarrow(el.getBoundingClientRect().width < px);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref, px]);
-  return narrow;
 }

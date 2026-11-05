@@ -2,6 +2,7 @@ import Link from "next/link";
 import Markdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { remarkChatPresentation, type EntityLink } from "@/lib/chat-markdown";
 
 const components: Components = {
   a: ({ href, title, children }) => {
@@ -77,6 +78,8 @@ export function MarkdownView({
   compact = false,
   headingOffset = 0,
   dropTitle,
+  entityLinks = [],
+  preserveBreaks = false,
 }: {
   content: string | null | undefined;
   className?: string;
@@ -85,10 +88,16 @@ export function MarkdownView({
   headingOffset?: number;
   /** Skip a leading H1 whose text equals this (case- and whitespace-insensitive), e.g. the page title. */
   dropTitle?: string | undefined;
+  entityLinks?: readonly EntityLink[];
+  preserveBreaks?: boolean;
 }) {
   if (!content || !content.trim()) return null;
   const offset = Math.max(0, Math.trunc(headingOffset));
-  const remarkPlugins = [remarkGfm, [remarkHeadings, { offset, dropTitle }]] as Options["remarkPlugins"];
+  const remarkPlugins = [
+    remarkGfm,
+    [remarkHeadings, { offset, dropTitle }],
+    [remarkChatPresentation, { entityLinks, preserveBreaks }],
+  ] as Options["remarkPlugins"];
   return (
     <div className={cn("markdown", compact && "markdown-compact", className)}>
       <Markdown remarkPlugins={remarkPlugins} components={components}>

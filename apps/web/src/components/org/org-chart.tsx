@@ -57,12 +57,11 @@ function AgentNodeView({ data }: NodeProps<AgentFlowNode>) {
         type="button"
         aria-label={`${agent.name}, ${agent.roleTitle}. ${agent.status}. ${agent.currentActivity ?? "Idle"}. Open details`}
         className={cn(
-          "nodrag nopan flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0e1622] text-left shadow-lg shadow-black/30 transition-colors hover:bg-[#121c2b]",
+          "nodrag nopan flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-surface text-left shadow-sm shadow-black/15 transition-colors hover:bg-surface-hover",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
           busy ? "border-accent/40" : "border-border-strong",
           agent.status === "retired" && "opacity-55",
         )}
-        style={{ boxShadow: busy ? "0 0 22px -8px rgba(34,211,238,0.55)" : undefined }}
       >
         <span aria-hidden className="h-[3px] w-full shrink-0" style={{ backgroundColor: dept.hex }} />
         <span className="flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2">
@@ -91,7 +90,7 @@ function AgentNodeView({ data }: NodeProps<AgentFlowNode>) {
           <span className="flex items-center gap-1.5 text-[11px]">
             {agent.executor === "cloud-agent" ? (
               <span
-                className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-px font-medium text-cyan-200"
+                className="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-1.5 py-px font-medium text-accent"
                 title="Copilot cloud agent"
               >
                 <Cloud aria-hidden className="size-2.5" /> Cloud agent
@@ -143,9 +142,9 @@ function AgentNodeView({ data }: NodeProps<AgentFlowNode>) {
 function CeoNodeView({ data }: NodeProps<CeoFlowNode>) {
   return (
     <>
-      <div className="flex h-full w-full items-center gap-3 rounded-xl border border-amber-400/40 bg-gradient-to-r from-amber-400/[0.12] to-[#0e1622] px-3.5 shadow-[0_0_28px_-10px_rgba(251,191,36,0.6)]">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-500">
-          <Crown aria-hidden className="size-4 text-[#1a0f02]" />
+      <div className="flex h-full w-full items-center gap-3 rounded-xl border border-amber-400/30 bg-surface-2 px-3.5">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-300">
+          <Crown aria-hidden className="size-4 text-amber-950" />
         </span>
         <span className="min-w-0">
           <span className="block text-[13px] font-semibold text-fg">You · CEO</span>
@@ -240,7 +239,10 @@ export default function OrgChart({
           sourceHandle: "bottom",
           targetHandle: p.stacked ? "left" : "top",
           type: "org",
-          style: { stroke: busy ? "rgba(34,211,238,0.55)" : "#2c3d55", strokeWidth: 1.5 },
+          style: {
+            stroke: busy ? "var(--color-accent-strong)" : "var(--color-border-strong)",
+            strokeWidth: 1.5,
+          },
         });
       }
     }
@@ -277,7 +279,7 @@ export default function OrgChart({
         zoomOnDoubleClick={false}
         aria-label="Organisation chart"
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1d2a3c" />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--color-border)" />
         <Controls
           showInteractive={false}
           position="bottom-left"
@@ -288,10 +290,10 @@ export default function OrgChart({
           zoomable
           position="bottom-right"
           nodeStrokeWidth={0}
-          maskColor="rgba(3, 7, 12, 0.7)"
+          maskColor="color-mix(in srgb, var(--color-bg) 70%, transparent)"
           nodeColor={(node) =>
             node.type === "ceo"
-              ? "#f59e0b"
+              ? "var(--color-amber-400)"
               : departmentStyle((node.data as AgentNodeData).agent.department).hex
           }
           className="!rounded-lg !border !border-border !bg-surface"

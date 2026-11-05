@@ -33,7 +33,7 @@ export const TONE_BADGE: Record<Tone, string> = {
   success: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
   warning: "border-amber-400/30 bg-amber-400/10 text-amber-300",
   danger: "border-rose-400/30 bg-rose-400/10 text-rose-300",
-  accent: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
+  accent: "border-accent/30 bg-accent/10 text-accent",
   violet: "border-violet-400/30 bg-violet-400/10 text-violet-300",
 };
 
@@ -43,7 +43,7 @@ export const TONE_DOT: Record<Tone, string> = {
   success: "bg-emerald-400",
   warning: "bg-amber-400",
   danger: "bg-rose-400",
-  accent: "bg-cyan-400",
+  accent: "bg-accent",
   violet: "bg-violet-400",
 };
 
@@ -53,7 +53,7 @@ export const TONE_TEXT: Record<Tone, string> = {
   success: "text-emerald-300",
   warning: "text-amber-300",
   danger: "text-rose-300",
-  accent: "text-cyan-300",
+  accent: "text-accent",
   violet: "text-violet-300",
 };
 
@@ -344,85 +344,85 @@ export interface DepartmentStyle {
 const DEPARTMENT_STYLES: Record<string, DepartmentStyle> = {
   executive: {
     label: "Executive",
-    hex: "#f59e0b",
+    hex: "#c4a471",
     text: "text-amber-300",
     badge: "border-amber-400/30 bg-amber-400/10 text-amber-300",
   },
   product: {
     label: "Product",
-    hex: "#a78bfa",
+    hex: "#a292b9",
     text: "text-violet-300",
     badge: "border-violet-400/30 bg-violet-400/10 text-violet-300",
   },
   design: {
     label: "Design",
-    hex: "#f472b6",
+    hex: "#c499b2",
     text: "text-pink-300",
     badge: "border-pink-400/30 bg-pink-400/10 text-pink-300",
   },
   engineering: {
     label: "Engineering",
-    hex: "#38bdf8",
+    hex: "#89aacb",
     text: "text-sky-300",
     badge: "border-sky-400/30 bg-sky-400/10 text-sky-300",
   },
   qa: {
     label: "QA",
-    hex: "#34d399",
+    hex: "#87b49d",
     text: "text-emerald-300",
     badge: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
   },
   devops: {
     label: "DevOps & SRE",
-    hex: "#fb923c",
+    hex: "#c39d7d",
     text: "text-orange-300",
     badge: "border-orange-400/30 bg-orange-400/10 text-orange-300",
   },
   security: {
     label: "Security",
-    hex: "#f87171",
+    hex: "#c48f8c",
     text: "text-red-300",
     badge: "border-red-400/30 bg-red-400/10 text-red-300",
   },
   docs: {
     label: "Docs",
-    hex: "#2dd4bf",
+    hex: "#8db5b0",
     text: "text-teal-300",
     badge: "border-teal-400/30 bg-teal-400/10 text-teal-300",
   },
   marketing: {
     label: "Marketing",
-    hex: "#e879f9",
+    hex: "#b898c0",
     text: "text-fuchsia-300",
     badge: "border-fuchsia-400/30 bg-fuchsia-400/10 text-fuchsia-300",
   },
   sales: {
     label: "Sales",
-    hex: "#a3e635",
+    hex: "#a6b58c",
     text: "text-lime-300",
     badge: "border-lime-400/30 bg-lime-400/10 text-lime-300",
   },
   support: {
     label: "Support",
-    hex: "#60a5fa",
+    hex: "#90accc",
     text: "text-blue-300",
     badge: "border-blue-400/30 bg-blue-400/10 text-blue-300",
   },
   finance: {
     label: "Finance",
-    hex: "#facc15",
+    hex: "#c4b77d",
     text: "text-yellow-300",
     badge: "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
   },
   legal: {
     label: "Legal",
-    hex: "#94a3b8",
+    hex: "#9aaabd",
     text: "text-slate-300",
     badge: "border-slate-400/30 bg-slate-400/10 text-slate-300",
   },
   hr: {
     label: "People",
-    hex: "#fb7185",
+    hex: "#c08598",
     text: "text-rose-300",
     badge: "border-rose-400/30 bg-rose-400/10 text-rose-300",
   },
@@ -432,7 +432,7 @@ export function departmentStyle(department: string | null | undefined): Departme
   return (
     DEPARTMENT_STYLES[department ?? ""] ?? {
       label: department ? department.charAt(0).toUpperCase() + department.slice(1) : "Other",
-      hex: "#94a3b8",
+      hex: "#9aaabd",
       text: "text-slate-300",
       badge: "border-slate-400/30 bg-slate-400/10 text-slate-300",
     }

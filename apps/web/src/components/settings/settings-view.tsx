@@ -495,7 +495,9 @@ function SystemCard() {
           <Item label="Kill switch">
             {data ? (data.paused ? "All agents paused" : "Agents running") : "—"}
           </Item>
-          <Item label="Onboarding">{data ? (data.onboarded ? "Complete" : "Not completed") : "—"}</Item>
+          <Item label="Setup checklist">
+            {data ? (data.onboarded ? "Dismissed (reopen on Dashboard)" : "Shown on Dashboard") : "—"}
+          </Item>
         </dl>
       </CardContent>
     </Card>

@@ -310,17 +310,47 @@ export class DeliveryService {
         : Array.isArray(given.changes)
           ? given.changes.filter((c): c is string => typeof c === "string")
           : [];
-      const payload =
-        kind === "merge_to_main"
-          ? await this.mergeEvidence(ini, given, changes, releaseNotes)
-          : await this.deployEvidence(ini, given, changes, testPlan);
-      return { payload: { ...payload }, documentIds };
+      if (kind === "merge_to_main") {
+        const payload = await this.mergeEvidence(ini, given, changes, releaseNotes);
+        const checksPassed = Boolean(
+          payload.checks?.length && payload.checks.every((check) => check.conclusion === "success"),
+        );
+        return {
+          payload: {
+            ...payload,
+            risk: `Changes the product's default branch and may trigger its release workflows. ${payload.filesChanged == null ? "Change size is unavailable." : `${payload.filesChanged} files changed.`} Passing checks do not establish user impact or migration safety; review the change set and release notes.`,
+            recommendation:
+              checksPassed && payload.prUrl
+                ? "All recorded checks passed. Review the linked release diff, release notes and downstream workflow effects before deciding; checks alone do not prove the release is safe."
+                : "Hold the merge decision until the release PR and completed passing checks can be verified.",
+          },
+          documentIds,
+        };
+      }
+      const payload = await this.deployEvidence(ini, given, changes, testPlan);
+      return {
+        payload: {
+          ...payload,
+          risk: "Changes the production environment used by customers. Downtime, data migrations and configuration effects require review; a staging success alone does not establish production safety.",
+          recommendation:
+            payload.stagingVerified && payload.runUrl
+              ? "Review the production workflow, staging evidence and rollback plan before deciding. Confirm that migrations and customer impact are acceptable; no production outcome is guaranteed."
+              : "Hold deployment until the intended workflow and successful staging evidence for the released code are verified.",
+        },
+        documentIds,
+      };
     } catch (err) {
       this.app.log.warn(
         { err: (err as Error).message, initiativeId: ini.id, kind },
         "gate evidence unavailable",
       );
-      return { payload: {}, documentIds };
+      return {
+        payload: {
+          risk: "Release evidence could not be retrieved. User impact and release readiness are unknown.",
+          recommendation: "Hold this decision and request the missing release evidence.",
+        },
+        documentIds,
+      };
     }
   }
 

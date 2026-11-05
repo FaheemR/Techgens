@@ -44,6 +44,7 @@ export function goalDTO(g: Goal): GoalDTO {
     title: g.title,
     description: g.description,
     targetValue: g.targetValue,
+    startValue: g.startValue,
     currentValue: g.currentValue,
     unit: g.unit,
     dueDate: g.dueDate?.toISOString() ?? null,
@@ -59,7 +60,10 @@ export class CompanyService {
   /** Idempotent: roles are (re)loaded from role files; agents, budgets and routines are created when missing. */
   async seed(): Promise<void> {
     const db = this.app.db;
-    await db.insert(schema.company).values({ id: "default", policies: DEFAULT_POLICIES, values: DEFAULT_VALUES }).onConflictDoNothing();
+    await db
+      .insert(schema.company)
+      .values({ id: "default", policies: DEFAULT_POLICIES, values: DEFAULT_VALUES })
+      .onConflictDoNothing();
 
     const roles = loadRolesFromDir();
     const errors = validateOrgChart(roles);
@@ -67,10 +71,22 @@ export class CompanyService {
     const existing = new Map((await db.select().from(schema.roles)).map((r) => [r.id, r]));
     for (const role of roles) {
       const { prompt, ...definition } = role;
-      const row = { id: role.id, title: role.title, department: role.department, reportsTo: role.reportsTo, description: role.description, definition, prompt };
+      const row = {
+        id: role.id,
+        title: role.title,
+        department: role.department,
+        reportsTo: role.reportsTo,
+        description: role.description,
+        definition,
+        prompt,
+      };
       const current = existing.get(role.id);
       if (!current) await db.insert(schema.roles).values({ ...row, source: "builtin" });
-      else if (current.source === "builtin") await db.update(schema.roles).set({ ...row, updatedAt: new Date() }).where(eq(schema.roles.id, role.id));
+      else if (current.source === "builtin")
+        await db
+          .update(schema.roles)
+          .set({ ...row, updatedAt: new Date() })
+          .where(eq(schema.roles.id, role.id));
     }
 
     // Staff roles that have no agents yet.
@@ -88,7 +104,12 @@ export class CompanyService {
 
     const budgets = await db.select().from(schema.budgets).where(eq(schema.budgets.scope, "company"));
     if (!budgets.length) {
-      await db.insert(schema.budgets).values({ scope: "company", scopeId: null, period: "month", limitCredits: DEFAULT_COMPANY_BUDGET_MONTH });
+      await db.insert(schema.budgets).values({
+        scope: "company",
+        scopeId: null,
+        period: "month",
+        limitCredits: DEFAULT_COMPANY_BUDGET_MONTH,
+      });
     }
     await this.app.routines.seed();
   }
@@ -113,7 +134,11 @@ export class CompanyService {
       .set({ ...allowed, updatedAt: new Date() })
       .where(eq(schema.company.id, "default"))
       .returning();
-    await this.app.bus.emit({ type: "company.updated", actorType: "ceo", summary: "Company strategy updated" });
+    await this.app.bus.emit({
+      type: "company.updated",
+      actorType: "ceo",
+      summary: "Company strategy updated",
+    });
     return row!;
   }
 
@@ -134,7 +159,13 @@ export class CompanyService {
     return row ?? null;
   }
 
-  async createProduct(input: { name: string; description?: string; vision?: string; repoOwner?: string | null; repoName?: string | null }): Promise<Product> {
+  async createProduct(input: {
+    name: string;
+    description?: string;
+    vision?: string;
+    repoOwner?: string | null;
+    repoName?: string | null;
+  }): Promise<Product> {
     if (!input.name.trim()) throw new DomainError("product name is required");
     let slug = slugify(input.name) || "product";
     for (let i = 2; await this.slugTaken(slug); i++) slug = `${slugify(input.name)}-${i}`;
@@ -153,11 +184,31 @@ export class CompanyService {
   }
 
   private async slugTaken(slug: string): Promise<boolean> {
-    const rows = await this.app.db.select({ id: schema.products.id }).from(schema.products).where(eq(schema.products.slug, slug));
+    const rows = await this.app.db
+      .select({ id: schema.products.id })
+      .from(schema.products)
+      .where(eq(schema.products.slug, slug));
     return rows.length > 0;
   }
 
-  async updateProduct(id: string, patch: Partial<Pick<Product, "name" | "description" | "vision" | "status" | "repoOwner" | "repoName" | "defaultBranch" | "integrationBranch" | "azure" | "projectNumber">>): Promise<Product> {
+  async updateProduct(
+    id: string,
+    patch: Partial<
+      Pick<
+        Product,
+        | "name"
+        | "description"
+        | "vision"
+        | "status"
+        | "repoOwner"
+        | "repoName"
+        | "defaultBranch"
+        | "integrationBranch"
+        | "azure"
+        | "projectNumber"
+      >
+    >,
+  ): Promise<Product> {
     const [row] = await this.app.db
       .update(schema.products)
       .set({ ...patch, updatedAt: new Date() })
@@ -183,6 +234,7 @@ export class CompanyService {
         productId: input.productId ?? null,
         initiativeId: input.initiativeId ?? null,
         targetValue: input.targetValue ?? null,
+        startValue: input.startValue ?? null,
         currentValue: input.currentValue ?? null,
         unit: input.unit ?? null,
         dueDate: input.dueDate ? new Date(input.dueDate) : null,
@@ -194,11 +246,24 @@ export class CompanyService {
 
   async updateGoal(id: string, input: Partial<GoalDTO>): Promise<Goal> {
     const patch: Partial<Goal> = {};
-    for (const key of ["title", "description", "targetValue", "currentValue", "unit", "status", "type"] as const) {
+    for (const key of [
+      "title",
+      "description",
+      "targetValue",
+      "startValue",
+      "currentValue",
+      "unit",
+      "status",
+      "type",
+    ] as const) {
       if (input[key] !== undefined) (patch as Record<string, unknown>)[key] = input[key];
     }
     if (input.dueDate !== undefined) patch.dueDate = input.dueDate ? new Date(input.dueDate) : null;
-    const [row] = await this.app.db.update(schema.goals).set({ ...patch, updatedAt: new Date() }).where(eq(schema.goals.id, id)).returning();
+    const [row] = await this.app.db
+      .update(schema.goals)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(schema.goals.id, id))
+      .returning();
     if (!row) throw new DomainError("goal not found", "not_found");
     return row;
   }

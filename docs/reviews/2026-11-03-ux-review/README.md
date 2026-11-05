@@ -16,13 +16,22 @@ Screenshots referenced below are in this folder (`NN-*.webp`, `R*-*.webp` = resp
 >
 > - The fixes were **re-tested by the same evaluator**: 19 findings fixed, 13 partially fixed, 5 open, no regressions; UX maturity rose from 3 to 3.5 (see the [re-test report](retest/README.md)).
 > - A follow-up round then fixed the re-test's new issues N1–N13 and most of the partial items: F11, F12, F16, F18, F21, F25, F26, F27, F31 and F36. F12's root cause was toasts sitting over the decision buttons. Automated tests and headless browser checks verify this round; the evaluator has not re-scored it yet.
-> - **Still open:**
->   - F19: a "Needs attention" dashboard.
->   - F20: retiring agents.
->   - F28: entity links and thread management in chat.
->   - F35: truncated document titles.
->   - F37: an onboarding checklist and key-result baselines.
->   - The rest of F01: risk and recommendation blocks, and richer vision/PRD briefs.
+> - **4 Nov 2026 implementation follow-up:** the remaining continuation backlog below is now implemented and covered by focused automated checks. This is an engineering follow-up, not a new evaluator retest or score.
+>   - F19: "Needs attention" surfaces pending/stale gates, paused/blocked initiatives, configured budget warnings and open incidents; key company events replace tool/usage telemetry.
+>   - F20: confirmed retirement with explicit same-role replacement for unfinished work, open-job and last-Chief-of-Staff guards, retained history, pause-impact guidance and hire budget/model details.
+>   - F28: exact, unambiguous initiative-name links, preserved chat line breaks, title search, rename and reversible archive/restore. Archiving retains messages and does not stop work.
+>   - F35: leading document-kind labels and wrapping full titles in document/initiative lists and approval headers.
+>   - F37: three independently tracked setup facts, dismissal/reopen without pretending setup is complete, and persisted key-result baselines with baseline-relative progress.
+>   - Remaining F01 continuation: source-labelled risk/recommendation blocks, concrete vision/PRD brief guidance and demo summaries, conservative release/deploy guidance, and budget-window spend by agent. Missing evidence is explicitly marked, never treated as proof of safety.
+> - Broader original recommendations outside this continuation remain unclaimed: structured chat status cards/ticker cleanup, product edit/archive, forecasted budget completion costs, and stricter per-kind approval payload schemas.
+
+### 4 Nov follow-up validation and limits
+
+- **113/113 tests passed across seven focused suites**, covering the attention boundary, baseline calculations and persistence, Markdown AST preservation, evidence attribution, thread validation/archive side effects, retirement/reassignment guards, retired-assignee reopening, setup facts and budget scope/window boundaries. Existing pilot and governance tests also exercise the enriched gate producers.
+- Workspace TypeScript checks and the production web build passed.
+- Twelve local Playwright checks passed in the **fake runtime** with no page errors. They exercise rename/search/archive/restore, initiative links, setup dismiss/reopen, exact attention links, retirement/replacement and Chief-of-Staff succession, 35 → 60 baseline progress at 47.5 = 50%, full long-title wrapping, and approval decision blocks. Dashboard, chat, documents, approval detail and goals have no page overflow at 320, 390, 768 and 1280 px.
+- The final full native Windows run passed **207/207 tests across all 19 suites**, with no skipped cases. Seven initial platform-dependent failures were resolved in the test harnesses: the fake Azure CLI logs to a temporary file instead of an extra Bash pipe; role fixtures use Git's LF content regardless of checkout line endings; and Windows IPC invokes the generated server's actual SIGTERM handler, while POSIX still uses the real signal. Server shutdown is awaited before fixture cleanup. No production Azure or repository-template behaviour was changed to obtain this result. A Linux dependency-restore attempt was blocked by registry access, so these results do not claim a new Linux CI run.
+- All browser data was isolated from the integration-test database. No live paid Copilot/GitHub/Azure run, project licence selection or production deployment was performed. Agent prompts guide future real runs but cannot establish their output quality without a live, separately authorised retest. Existing approval policies and execution permissions are unchanged.
 
 ---
 

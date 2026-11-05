@@ -123,6 +123,9 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
         { name: "codeql / analyze", conclusion: "success" },
       ],
       filesChanged: 7,
+      risk: "Changes the product's default branch and may trigger its release workflows. 7 files changed. Passing checks do not establish user impact or migration safety; review the change set and release notes.",
+      recommendation:
+        "All recorded checks passed. Review the linked release diff, release notes and downstream workflow effects before deciding; checks alone do not prove the release is safe.",
       additions: 19,
       deletions: 0,
       commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
@@ -147,6 +150,9 @@ describe("e2e pilot: CEO directive → production (scripted agents, simulated Gi
       runUrl: `https://github.com/acme/invoicelite/actions/runs/${prodRun.id}`,
       commitSha: prodRun.sha,
       stagingVerified: true,
+      risk: "Changes the production environment used by customers. Downtime, data migrations and configuration effects require review; a staging success alone does not establish production safety.",
+      recommendation:
+        "Review the production workflow, staging evidence and rollback plan before deciding. Confirm that migrations and customer impact are acceptable; no production outcome is guaranteed.",
       stagingEvidence: expect.stringMatching(
         /^deploy-staging run \d+ succeeded on [0-9a-f]{7}; QA verification: "InvoiceLite MVP — Test plan/,
       ),

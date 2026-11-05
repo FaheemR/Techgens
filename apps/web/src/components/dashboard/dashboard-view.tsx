@@ -2,43 +2,16 @@
 
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import type {
-  ApprovalSummaryDTO,
-  CompanyDTO,
-  DashboardDTO,
-  GoalDTO,
-  InitiativeSummaryDTO,
-  JobDTO,
-} from "@techgens/core";
-import {
-  ArrowRight,
-  Bot,
-  Coins,
-  Inbox,
-  MessagesSquare,
-  Rocket,
-  Siren,
-  Sparkles,
-  Target,
-  Wallet,
-  Activity,
-  ShieldAlert,
-  X,
-} from "lucide-react";
+import type { CompanyDTO, DashboardDTO, GoalDTO, InitiativeSummaryDTO, JobDTO } from "@techgens/core";
+import { ArrowRight, Bot, ChevronDown, MessagesSquare, Rocket, Target, Activity, X } from "lucide-react";
 import { ActivityFeed } from "@/components/common/activity-feed";
 import { AgentAvatar } from "@/components/common/agent-avatar";
 import { Credits } from "@/components/common/credits";
-import { KpiCard } from "@/components/common/kpi-card";
 import { PageHeader } from "@/components/common/page-header";
 import { QueryView } from "@/components/common/query-view";
 import { KeyResultWarning } from "@/components/common/key-result-warning";
 import { StageBar, stageShortTitle } from "@/components/common/stages";
-import {
-  ApprovalKindBadge,
-  GoalStatusBadge,
-  InitiativeStatusBadge,
-  JobStatusBadge,
-} from "@/components/common/status";
+import { GoalStatusBadge, InitiativeStatusBadge, JobStatusBadge } from "@/components/common/status";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -53,6 +26,7 @@ import { api } from "@/lib/api";
 import { useApiMutation } from "@/lib/mutations";
 import { qk, useDashboard } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import { dashboardAttention, isDashboardEvent } from "@/lib/attention";
 
 export function DashboardView() {
   const dashboard = useDashboard();
@@ -64,25 +38,20 @@ export function DashboardView() {
 }
 
 function Dashboard({ data }: { data: DashboardDTO }) {
-  const { company, initiatives, pendingApprovals, activeJobs, goals, usage, openIncidents } = data;
+  const { company, initiatives, activeJobs, goals, usage, openIncidents } = data;
   const active = initiatives.filter((i) => i.status === "active");
   const running = activeJobs.filter((j) => j.status === "running").length;
   const waiting = activeJobs.filter((j) => j.status === "waiting").length;
   const budget = usage.monthBudgetCredits;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-8">
       <PageHeader
-        eyebrow={company.name || "Your company"}
-        title="Command overview"
-        description={company.mission || "Set the vision, approve the gates — your AI staff does the rest."}
+        title="Today"
+        description="Decisions and blockers, in one place."
         actions={
           <>
-            <Link href="/approvals" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-              <Inbox />
-              Review approvals
-            </Link>
-            <Link href="/chat" className={buttonVariants({ variant: "primary", size: "sm" })}>
+            <Link href="/chat" className={buttonVariants({ variant: "outline", size: "lg" })}>
               <MessagesSquare />
               New directive
             </Link>
@@ -90,84 +59,128 @@ function Dashboard({ data }: { data: DashboardDTO }) {
         }
       />
 
-      {!company.onboarded ? <OnboardingCallout /> : null}
+      <AttentionCard data={data} />
 
-      <section aria-label="Key metrics" className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
-        <KpiCard
-          label="Active initiatives"
-          value={active.length}
-          sub={`${initiatives.length} total`}
-          icon={Rocket}
-          href="/initiatives"
-        />
-        <KpiCard
-          label="Pending approvals"
-          value={pendingApprovals.length}
-          sub={pendingApprovals.length > 0 ? "Agents are waiting on you" : "Nothing waiting"}
-          icon={ShieldAlert}
-          tone={pendingApprovals.length > 0 ? "warning" : "success"}
-          highlight={pendingApprovals.length > 0}
-          href="/approvals"
-        />
-        <KpiCard
-          label="Agent jobs"
-          value={activeJobs.length}
-          sub={`${running} running · ${waiting} waiting`}
-          icon={Bot}
-          href="/activity"
-        />
-        <KpiCard
-          label="Credits today"
-          value={credits(usage.todayCredits)}
-          sub="AI credits spent"
-          icon={Coins}
-          href="/budget"
-        />
-        <KpiCard
-          label="Credits this month"
-          value={credits(usage.monthCredits)}
-          sub={
-            budget
-              ? `of ${credits(budget)} budget · ${percent(usage.monthCredits / budget)}`
-              : "No monthly budget set"
-          }
-          icon={Wallet}
-          tone={budget && usage.monthCredits >= budget ? "danger" : "accent"}
-          href="/budget"
-        >
-          {budget ? (
-            <Progress value={usage.monthCredits} max={budget} label="Monthly budget used" size="sm" />
+      <OnboardingCallout setup={data.setup} dismissed={company.onboarded} />
+
+      <details className="group border-t border-border">
+        <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-4 py-4 [&::-webkit-details-marker]:hidden">
+          <span>
+            <span className="block text-lg font-semibold">Company overview</span>
+            <span className="mt-1 block text-sm text-muted">
+              {active.length} active initiatives · {running} running jobs · {credits(usage.monthCredits)}{" "}
+              credits this month
+            </span>
+          </span>
+          <ChevronDown
+            aria-hidden
+            className="size-5 shrink-0 text-muted transition-transform group-open:rotate-180"
+          />
+        </summary>
+        <div className="space-y-6 pb-6">
+          {company.mission ? (
+            <p className="max-w-[70ch] text-base leading-relaxed text-muted">{company.mission}</p>
           ) : null}
-        </KpiCard>
-        <KpiCard
-          label="Open incidents"
-          value={openIncidents}
-          sub={openIncidents > 0 ? "Needs attention" : "All systems normal"}
-          icon={Siren}
-          tone={openIncidents > 0 ? "danger" : "success"}
-          highlight={openIncidents > 0}
-          href="/operations"
-        />
-      </section>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+          <dl className="grid gap-4 border-y border-border py-5 sm:grid-cols-2">
+            <div>
+              <dt className="text-sm text-muted">Credit usage</dt>
+              <dd className="mt-1 text-base tabular-nums">
+                {credits(usage.todayCredits)} today · {credits(usage.monthCredits)} this month
+              </dd>
+              <p className="mt-1 text-sm text-muted">
+                {budget
+                  ? `${credits(budget)} monthly budget · ${percent(usage.monthCredits / budget)} used`
+                  : "No monthly budget set"}
+              </p>
+              <Link
+                href="/budget"
+                className="mt-2 inline-flex min-h-11 items-center text-sm text-accent hover:underline"
+              >
+                View budgets
+              </Link>
+            </div>
+            <div>
+              <dt className="text-sm text-muted">Company activity</dt>
+              <dd className="mt-1 text-base">
+                {running} running jobs · {waiting} waiting · {openIncidents} open incidents
+              </dd>
+              <Link
+                href="/operations"
+                className="mt-2 inline-flex min-h-11 items-center text-sm text-accent hover:underline"
+              >
+                View operations
+              </Link>
+            </div>
+          </dl>
           <InitiativesCard initiatives={initiatives} />
           <ActiveJobsCard jobs={activeJobs} />
-        </div>
-        <div className="space-y-6">
-          <ApprovalsPreview approvals={pendingApprovals} />
           <GoalsCard goals={goals} />
           <RecentActivityCard seed={data.recentEvents} />
         </div>
-      </div>
+      </details>
     </div>
   );
 }
 
-function OnboardingCallout() {
+function AttentionCard({ data }: { data: DashboardDTO }) {
+  const now = useNow();
+  const items = dashboardAttention(data, now);
+  return (
+    <section aria-labelledby="attention-heading">
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="attention-heading" className="text-xl font-semibold">
+          Needs attention
+        </h2>
+        <Link
+          href="/approvals"
+          className="inline-flex min-h-11 items-center text-sm text-accent hover:underline"
+        >
+          Approval inbox
+        </Link>
+      </div>
+      {items.length ? (
+        <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
+          {items.map((item) => (
+            <li key={item.id} className="min-w-0">
+              <Link
+                href={item.href}
+                className="flex items-center justify-between gap-4 rounded-lg px-5 py-5 hover:bg-surface-2"
+              >
+                <span className="min-w-0">
+                  <span
+                    className={cn(
+                      "block break-words text-base font-semibold leading-relaxed",
+                      item.urgent ? "text-amber-200" : "text-fg",
+                    )}
+                  >
+                    {item.title}
+                  </span>
+                  <span className="mt-1 block text-sm leading-relaxed text-muted">{item.detail}</span>
+                </span>
+                <span className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-accent">
+                  {item.id.startsWith("approval-") ? "Review" : "Open"}{" "}
+                  <ArrowRight aria-hidden className="size-4" />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="rounded-xl border border-border bg-surface px-5 py-6">
+          <p className="text-base font-medium">Nothing needs your attention right now</p>
+          <p className="mt-2 max-w-[65ch] text-base leading-relaxed text-muted">
+            No pending decisions, blockers, budget warnings or open incidents. Check the company overview or
+            give the team a new directive.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OnboardingCallout({ setup, dismissed }: { setup: DashboardDTO["setup"]; dismissed: boolean }) {
   const queryClient = useQueryClient();
-  const dismiss = useApiMutation(() => api.put<CompanyDTO>("/api/company", { onboarded: true }), {
+  const dismiss = useApiMutation((onboarded: boolean) => api.put<CompanyDTO>("/api/company", { onboarded }), {
     errorTitle: "Couldn't update onboarding",
     onSuccess: (company) => {
       queryClient.setQueryData(qk.company, company);
@@ -175,40 +188,61 @@ function OnboardingCallout() {
     },
     invalidate: [qk.system],
   });
+  const steps = [
+    { done: setup.strategy, label: "Company strategy", href: "/strategy" },
+    { done: setup.github, label: "Connect GitHub (simulated in demo mode)", href: "/settings" },
+    { done: setup.directive, label: "First directive", href: "/chat" },
+  ];
+  const completed = steps.filter((step) => step.done).length;
+  if (dismissed)
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
+        <p>Company setup: {completed} of 3 steps complete</p>
+        <Button variant="ghost" size="sm" onClick={() => dismiss.mutate(false)} loading={dismiss.isPending}>
+          Show setup checklist
+        </Button>
+      </div>
+    );
   return (
-    <Card className="overflow-hidden border-accent/30 bg-gradient-to-r from-accent/[0.08] via-surface to-surface">
-      <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <Sparkles aria-hidden className="size-6 shrink-0 text-accent" />
+    <details className="group border-t border-border">
+      <summary className="flex min-h-14 cursor-pointer flex-wrap items-center justify-between gap-2 py-4 text-sm">
+        <span className="font-medium">Company setup</span>
+        <span className="inline-flex items-center gap-3 text-muted">
+          {completed} of 3 steps complete
+          <ChevronDown aria-hidden className="size-5 transition-transform group-open:rotate-180" />
+        </span>
+      </summary>
+      <div className="flex flex-col gap-4 pb-5 sm:flex-row sm:items-start">
         <div className="flex-1">
-          <p className="font-semibold">Welcome, CEO. Let&apos;s set up your company.</p>
-          <p className="mt-0.5 text-sm text-muted">
-            Define your mission, values and policies (the company constitution), connect GitHub, then give
-            your Chief of Staff the first directive.
-          </p>
+          <Progress value={completed} max={3} label="Company setup progress" className="mt-2" />
+          <ul className="mt-2 space-y-1 text-sm">
+            {steps.map((step) => (
+              <li key={step.href}>
+                <Link
+                  href={step.href}
+                  className="inline-flex min-h-11 items-center text-accent hover:underline"
+                >
+                  <span className="mr-2">{step.done ? "Complete:" : "To do:"}</span>
+                  {step.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/strategy" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-            Company strategy
-          </Link>
-          <Link href="/settings" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-            Connect GitHub
-          </Link>
-          <Link href="/chat" className={buttonVariants({ variant: "primary", size: "sm" })}>
-            First directive
-          </Link>
           <Button
             variant="ghost"
-            size="icon-sm"
-            onClick={() => dismiss.mutate()}
+            size="icon"
+            onClick={() => dismiss.mutate(true)}
             loading={dismiss.isPending}
             aria-label="Dismiss setup checklist"
-            title="Mark setup as done"
+            title="Dismiss checklist (does not complete unfinished steps)"
           >
             {dismiss.isPending ? null : <X />}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </details>
   );
 }
 
@@ -354,58 +388,6 @@ function ActiveJobsCard({ jobs }: { jobs: JobDTO[] }) {
   );
 }
 
-function ApprovalsPreview({ approvals }: { approvals: ApprovalSummaryDTO[] }) {
-  const now = useNow();
-  return (
-    <Card className={approvals.length > 0 ? "border-amber-400/30" : undefined}>
-      <CardHeader
-        title="Waiting on you"
-        description={
-          approvals.length > 0
-            ? `${approvals.length} gate${approvals.length === 1 ? "" : "s"} need a decision`
-            : "Your inbox is clear"
-        }
-        icon={Inbox}
-        action={
-          <Link href="/approvals" className={buttonVariants({ variant: "ghost", size: "xs" })}>
-            Inbox <ArrowRight />
-          </Link>
-        }
-      />
-      {approvals.length === 0 ? (
-        <EmptyState
-          compact
-          icon={ShieldAlert}
-          title="No pending approvals"
-          description="Gate reviews (PRDs, architecture, releases) land here."
-        />
-      ) : (
-        <ul className="divide-y divide-border/70">
-          {approvals.slice(0, 5).map((approval) => (
-            <li key={approval.id}>
-              <Link
-                href={`/approvals?id=${approval.id}`}
-                className="block px-4 py-3 transition-colors hover:bg-white/[0.025]"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <ApprovalKindBadge kind={approval.kind} />
-                  <span className="text-xs text-subtle">{relativeTime(approval.createdAt, now)}</span>
-                </div>
-                <p className="mt-1.5 line-clamp-2 text-sm font-medium text-fg">{approval.title}</p>
-                <p className="mt-0.5 truncate text-xs text-muted">
-                  {approval.initiativeTitle ?? "Company-wide"}
-                  {approval.requestedBy ? ` · ${approval.requestedBy}` : ""}
-                  {approval.round > 1 ? ` · round ${approval.round}` : ""}
-                </p>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
 function GoalsCard({ goals }: { goals: GoalDTO[] }) {
   const { objectives } = buildObjectiveTree(goals);
   return (
@@ -466,11 +448,11 @@ function GoalsCard({ goals }: { goals: GoalDTO[] }) {
 
 function RecentActivityCard({ seed }: { seed: DashboardDTO["recentEvents"] }) {
   const live = useLiveEvents();
-  const events = mergeEvents(live.events, seed, 12);
+  const events = mergeEvents(live.events, seed, 200).filter(isDashboardEvent).slice(0, 8);
   return (
     <Card>
       <CardHeader
-        title="Recent activity"
+        title="Key company events"
         icon={Activity}
         action={
           <Link href="/activity" className={buttonVariants({ variant: "ghost", size: "xs" })}>

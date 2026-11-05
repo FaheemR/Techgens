@@ -60,6 +60,7 @@ const LINK_LABELS: Record<string, string> = {
 };
 
 const FIELD_LABELS: Record<string, string> = {
+  releasePrNumber: "Release PR",
   prNumber: "Pull request",
   pullRequestNumber: "Pull request",
   issueNumber: "Issue",
@@ -251,7 +252,7 @@ function renderValue(key: string, value: unknown): ReactNode {
     return value.join(", ");
   }
   return (
-    <pre className="max-h-64 overflow-auto rounded-md border border-border bg-[#060a10] p-2 font-mono text-xs text-muted">
+    <pre className="max-h-64 overflow-auto rounded-md border border-border bg-code p-2 font-mono text-xs text-muted">
       {JSON.stringify(value, null, 2)}
     </pre>
   );
@@ -303,7 +304,12 @@ const TECHNICAL = new Set(["stage", "scope"]);
  */
 export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload: Record<string, unknown> }) {
   const entries = Object.entries(payload).filter(
-    ([, v]) => v !== null && v !== undefined && v !== "" && !(isRecord(v) && Object.keys(v).length === 0),
+    ([key, v]) =>
+      !["risk", "recommendation", "spendByAgent"].includes(key) &&
+      v !== null &&
+      v !== undefined &&
+      v !== "" &&
+      !(isRecord(v) && Object.keys(v).length === 0),
   );
   if (entries.length === 0) return null;
 
@@ -364,6 +370,27 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
   const windowEndsAt = asString(payload.windowEndsAt);
 
   const blocks: ReactNode[] = [];
+  if (Array.isArray(payload.spendByAgent)) {
+    const spenders = payload.spendByAgent.filter(isRecord);
+    blocks.push(
+      <Block key="spenders" title="Spend by agent (this budget window)">
+        {spenders.length ? (
+          <ul className="space-y-1">
+            {spenders.map((row, index) => (
+              <li key={index}>
+                {asString(row.agentName) ?? "Unattributed usage"}:{" "}
+                {asNumber(row.credits) === undefined
+                  ? "Spend not reported"
+                  : `${credits(asNumber(row.credits)!)} credits`}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No attributed usage recorded in this window.</p>
+        )}
+      </Block>,
+    );
+  }
   if (prTitle || (prNumber !== undefined && prNumber !== null && !hasPrLink)) {
     blocks.push(
       <Block key="pr" title="Pull request">
@@ -516,7 +543,7 @@ export function PayloadDetails({ kind, payload }: { kind: ApprovalKind; payload:
               href={url}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/[0.07] px-3 py-1.5 text-sm font-medium text-cyan-100 transition-colors hover:bg-accent/15"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/[0.07] px-3 py-1.5 text-sm font-medium text-accent transition-colors hover:bg-accent/15"
             >
               <ExternalLink aria-hidden className="size-3.5" />
               {linkLabel(key, payload)}

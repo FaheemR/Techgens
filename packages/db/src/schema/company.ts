@@ -127,6 +127,7 @@ export const goals = pgTable("goals", {
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
   targetValue: doublePrecision("target_value"),
+  startValue: doublePrecision("start_value"),
   currentValue: doublePrecision("current_value"),
   unit: text("unit"),
   dueDate: timestamp("due_date", { withTimezone: true }),

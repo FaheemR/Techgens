@@ -110,7 +110,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               className={cn(
-                "pointer-events-auto flex animate-fade-in items-start gap-3 rounded-lg border bg-[#0f1724]/95 px-3.5 py-3 shadow-xl shadow-black/50 backdrop-blur",
+                "pointer-events-auto flex animate-fade-in items-start gap-3 rounded-lg border bg-surface-2 px-3.5 py-3 shadow-xl shadow-black/25",
                 STYLES[t.variant],
               )}
             >

@@ -1,11 +1,12 @@
 import type { GoalDTO } from "@techgens/core";
 
-/** Progress of a key result (current / target), or null when not measurable. */
+/** A missing legacy baseline means zero; descending targets use the same signed interval. */
 export function goalProgress(goal: GoalDTO): number | null {
-  if (goal.targetValue === null || goal.targetValue === 0 || goal.currentValue === null) {
+  const start = goal.startValue ?? 0;
+  if (goal.targetValue === null || goal.targetValue === start || goal.currentValue === null) {
     return goal.status === "achieved" ? 1 : null;
   }
-  return Math.max(0, goal.currentValue / goal.targetValue);
+  return Math.max(0, (goal.currentValue - start) / (goal.targetValue - start));
 }
 
 /** Objective progress: mean of its key results (each capped at 100%), falling back to its own values. */

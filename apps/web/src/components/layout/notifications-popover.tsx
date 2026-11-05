@@ -99,7 +99,7 @@ export function NotificationsPopover() {
           id={panelId}
           role="dialog"
           aria-label="Notifications"
-          className="absolute right-0 top-11 z-50 w-[min(24rem,calc(100vw-1.5rem))] animate-fade-in overflow-hidden rounded-xl border border-border-strong bg-[#0d1522] shadow-2xl shadow-black/60"
+          className="absolute right-0 top-11 z-50 w-[min(24rem,calc(100vw-1.5rem))] animate-fade-in overflow-hidden rounded-xl border border-border-strong bg-surface-2 shadow-xl shadow-black/25"
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
             <p className="text-sm font-semibold">

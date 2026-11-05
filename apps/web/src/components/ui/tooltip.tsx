@@ -28,7 +28,7 @@ export function Tooltip({
         id={id}
         className={cn(
           // Hidden tooltips take no layout space, so they can't widen their container or the page.
-          "pointer-events-none absolute z-50 hidden w-max max-w-64 rounded-md border border-border-strong bg-[#0f1724] px-2 py-1 text-xs font-normal leading-snug text-fg shadow-lg",
+          "pointer-events-none absolute z-50 hidden w-max max-w-64 rounded-md border border-border-strong bg-surface-2 px-2 py-1 text-xs font-normal leading-snug text-fg shadow-lg",
           "group-focus-within/tooltip:block group-hover/tooltip:block",
           side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5",
           align === "center" ? "left-1/2 -translate-x-1/2" : align === "start" ? "left-0" : "right-0",

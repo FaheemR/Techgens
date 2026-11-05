@@ -11,7 +11,7 @@ import { QueryView } from "@/components/common/query-view";
 import { DepartmentBadge, ExecutorBadge, JobStatusBadge } from "@/components/common/status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, Sheet } from "@/components/ui/dialog";
+import { ConfirmDialog, Dialog, Sheet } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { LoadingBlock } from "@/components/ui/spinner";
@@ -19,13 +19,14 @@ import { api } from "@/lib/api";
 import { credits, humanize, relativeTime } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { useApiMutation } from "@/lib/mutations";
-import { qk, useAgent, useModels } from "@/lib/queries";
+import { qk, useAgent, useModels, useOrg } from "@/lib/queries";
 
 interface AgentPatch {
   name?: string;
   status?: AgentStatus;
   modelOverride?: string | null;
   dailyCreditsOverride?: number | null;
+  replacementAgentId?: string;
 }
 
 export function AgentSheet({ agentId, onClose }: { agentId: string | null; onClose: () => void }) {
@@ -80,20 +81,26 @@ export function AgentSheet({ agentId, onClose }: { agentId: string | null; onClo
 function AgentDetail({ agent }: { agent: AgentDetailDTO }) {
   const now = useNow();
   const models = useModels();
+  const org = useOrg();
   const dailyOverride = agent.dailyCreditsOverride ?? null;
   const [modelOverride, setModelOverride] = useState(agent.modelOverride ?? "");
   const [daily, setDaily] = useState(dailyOverride === null ? "" : String(dailyOverride));
   const [hireOpen, setHireOpen] = useState(false);
+  const [retireOpen, setRetireOpen] = useState(false);
+  const [replacementAgentId, setReplacementAgentId] = useState("");
 
   const patch = useApiMutation((body: AgentPatch) => api.patch<AgentDTO>(`/api/agents/${agent.id}`, body), {
     success: (_r, body) =>
       body.status
-        ? body.status === "paused"
-          ? `${agent.name} paused`
-          : `${agent.name} resumed`
+        ? body.status === "retired"
+          ? `${agent.name} retired — history retained`
+          : body.status === "paused"
+            ? `${agent.name} paused`
+            : `${agent.name} resumed`
         : `${agent.name} updated`,
     errorTitle: "Couldn't update the agent",
-    invalidate: [qk.org, qk.agent(agent.id)],
+    invalidate: [qk.org, qk.agent(agent.id), ["work-items"], qk.dashboard],
+    onSuccess: () => setRetireOpen(false),
   });
 
   const dailyValue = Number(daily);
@@ -131,6 +138,11 @@ function AgentDetail({ agent }: { agent: AgentDetailDTO }) {
           <UserPlus />
           Hire another {agent.roleTitle}
         </Button>
+        {agent.status !== "retired" ? (
+          <Button variant="danger" size="sm" onClick={() => setRetireOpen(true)}>
+            Retire agent...
+          </Button>
+        ) : null}
       </div>
 
       <section className="rounded-lg border border-border bg-surface-2/50 p-3">
@@ -139,6 +151,17 @@ function AgentDetail({ agent }: { agent: AgentDetailDTO }) {
         <p className="mt-0.5 text-xs text-muted">
           {agent.activeJobs} active job{agent.activeJobs === 1 ? "" : "s"}
         </p>
+        <p className="mt-2 text-xs text-muted">
+          Pausing stops new turns, not a turn already running. Queued and waiting jobs remain assigned and
+          continue when resumed. Retirement keeps history and requires all jobs to finish or be cancelled.
+          Choose a same-role replacement to transfer unfinished work without starting new jobs.
+        </p>
+        <Link
+          href={`/work?assignee=${agent.id}`}
+          className="mt-2 inline-block text-xs text-accent hover:underline"
+        >
+          Review assigned work
+        </Link>
       </section>
 
       <section aria-labelledby="agent-budget">
@@ -378,6 +401,44 @@ function AgentDetail({ agent }: { agent: AgentDetailDTO }) {
         roleId={agent.roleId}
         roleTitle={agent.roleTitle}
       />
+      <ConfirmDialog
+        open={retireOpen}
+        onClose={() => setRetireOpen(false)}
+        onConfirm={() =>
+          patch.mutate({ status: "retired", ...(replacementAgentId ? { replacementAgentId } : {}) })
+        }
+        loading={patch.isPending}
+        title={`Retire ${agent.name}?`}
+        description="This agent will no longer receive assignments. Finish or cancel their jobs first. History and spending records are retained. A replacement is required for unfinished work; no jobs are created or transferred. The last active Chief of Staff cannot be retired."
+        confirmLabel="Retire agent"
+        cancelLabel="Keep agent"
+      >
+        <Field
+          label="Replacement for unfinished work"
+          htmlFor="retire-replacement"
+          hint="Only active agents with the same role are eligible. Hire another first if needed."
+        >
+          <Select
+            id="retire-replacement"
+            value={replacementAgentId}
+            onChange={(event) => setReplacementAgentId(event.target.value)}
+          >
+            <option value="">None (only if there is no unfinished work)</option>
+            {(org.data?.agents ?? [])
+              .filter(
+                (candidate) =>
+                  candidate.id !== agent.id &&
+                  candidate.roleId === agent.roleId &&
+                  candidate.status === "active",
+              )
+              .map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name}
+                </option>
+              ))}
+          </Select>
+        </Field>
+      </ConfirmDialog>
     </div>
   );
 }
@@ -394,6 +455,8 @@ export function HireDialog({
   roleTitle: string;
 }) {
   const [name, setName] = useState("");
+  const org = useOrg();
+  const role = org.data?.roles.find((r) => r.id === roleId);
   const hire = useApiMutation(
     (body: { roleId: string; name?: string }) => api.post<AgentDTO>("/api/agents", body),
     {
@@ -429,18 +492,26 @@ export function HireDialog({
         </>
       }
     >
-      <Field
-        label="Name"
-        htmlFor="hire-name"
-        hint="Optional — a persona name is picked automatically if empty."
-      >
-        <Input
-          id="hire-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Avery"
-        />
-      </Field>
+      <div className="space-y-4">
+        {role ? (
+          <p className="text-sm text-muted">
+            Daily budget cap: {credits(role.definition.budget.dailyCredits)} credits (not an upfront charge).
+            Model: {role.definition.model ?? "runtime default"}; per-role settings may override it.
+          </p>
+        ) : null}
+        <Field
+          label="Name"
+          htmlFor="hire-name"
+          hint="Optional — a persona name is picked automatically if empty."
+        >
+          <Input
+            id="hire-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Avery"
+          />
+        </Field>
+      </div>
     </Dialog>
   );
 }

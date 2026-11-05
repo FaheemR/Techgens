@@ -126,7 +126,6 @@ export function DocumentsView() {
                 <THead>
                   <tr>
                     <TH>Title</TH>
-                    <TH>Kind</TH>
                     <TH>Status</TH>
                     <TH>Initiative</TH>
                     <TH>Author</TH>
@@ -139,17 +138,16 @@ export function DocumentsView() {
                       <TD className="max-w-md">
                         <Link
                           href={`/documents/${doc.id}`}
-                          className="flex items-center gap-2 font-medium hover:text-accent"
+                          className="flex items-start gap-2 font-medium hover:text-accent"
+                          title={doc.title}
                         >
                           <FileText aria-hidden className="size-4 shrink-0 text-subtle" />
-                          <span className="truncate">{doc.title}</span>
+                          <Badge className="shrink-0">{documentKindLabel(doc.kind)}</Badge>
+                          <span className="min-w-0 whitespace-normal break-words">{doc.title}</span>
                           <Badge tone="info" className="shrink-0">
                             v{doc.version}
                           </Badge>
                         </Link>
-                      </TD>
-                      <TD>
-                        <Badge>{documentKindLabel(doc.kind)}</Badge>
                       </TD>
                       <TD>
                         <GenericStatusBadge status={doc.status} />

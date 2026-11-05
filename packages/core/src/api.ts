@@ -41,6 +41,7 @@ export interface SystemInfo {
     mode: "pat" | "app" | "demo" | null;
     appSlug: string | null;
   };
+  /** Legacy checklist-dismissed flag; setup completion is derived independently by the dashboard. */
   onboarded: boolean;
 }
 
@@ -51,6 +52,7 @@ export interface CompanyDTO {
   values: string[];
   policies: string;
   githubOwner: string | null;
+  /** Dismisses the dashboard checklist, not proof that setup steps are complete. */
   onboarded: boolean;
 }
 
@@ -79,6 +81,7 @@ export interface GoalDTO {
   title: string;
   description: string;
   targetValue: number | null;
+  startValue: number | null;
   currentValue: number | null;
   unit: string | null;
   dueDate: string | null;
@@ -283,6 +286,8 @@ export interface CheckEvidence {
  * null when GitHub could not provide them.
  */
 export interface MergeToMainPayload {
+  risk?: string;
+  recommendation?: string;
   stage?: LifecycleStage;
   prNumber: number;
   prUrl: string | null;
@@ -302,6 +307,8 @@ export interface MergeToMainPayload {
 
 /** `ApprovalDetailDTO.payload` of a `prod_deploy` approval. */
 export interface ProdDeployPayload {
+  risk?: string;
+  recommendation?: string;
   stage?: LifecycleStage;
   environment: string;
   runId: number;
@@ -322,6 +329,9 @@ export interface ProdDeployPayload {
 
 /** `ApprovalDetailDTO.payload` of a `budget_overrun` approval. */
 export interface BudgetOverrunPayload {
+  risk?: string;
+  recommendation?: string;
+  spendByAgent?: Array<{ agentName: string; credits: number }>;
   budgetId: string;
   /** Jobs paused by this overrun (resumed on approval). */
   jobIds: string[];
@@ -383,6 +393,7 @@ export interface UsageSummaryDTO {
 }
 
 export interface ThreadDTO {
+  archived: boolean;
   id: string;
   title: string;
   agentId: string | null;
@@ -443,6 +454,8 @@ export interface RoutineDTO {
 }
 
 export interface DashboardDTO {
+  setup: { strategy: boolean; github: boolean; directive: boolean };
+  budgets: BudgetDTO[];
   company: CompanyDTO;
   initiatives: InitiativeSummaryDTO[];
   pendingApprovals: ApprovalSummaryDTO[];

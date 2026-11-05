@@ -93,7 +93,9 @@ export const collaborationTools: Record<string, Factory> = {
         summary: z
           .string()
           .min(10)
-          .describe("What is being approved, key decisions, risks, and your recommendation"),
+          .describe(
+            "Concrete decision brief: outcome, scope/non-goals, success criteria, timeline and credits. Include '## Risk / blast radius' and '## Recommendation' sections with affected users/systems, mitigations, unknowns, reasons and evidence. Never invent verification.",
+          ),
         documentIds: z.array(z.string()).default([]),
         payload: z.record(z.string(), z.unknown()).optional(),
       }),

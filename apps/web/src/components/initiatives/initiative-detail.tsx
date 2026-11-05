@@ -561,7 +561,9 @@ function DocumentsList({ documents }: { documents: DocumentSummaryDTO[] }) {
             >
               <FileText aria-hidden className="size-4 shrink-0 text-subtle" />
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{doc.title}</p>
+                <p className="whitespace-normal break-words font-medium" title={doc.title}>
+                  {doc.title}
+                </p>
                 <p className="text-xs text-muted">
                   {documentKindLabel(doc.kind)} · v{doc.version}
                   {doc.authorName ? ` · ${doc.authorName}` : ""} · updated {relativeTime(doc.updatedAt, now)}

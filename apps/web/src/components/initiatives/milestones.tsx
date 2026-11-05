@@ -67,7 +67,7 @@ export function MilestoneRoadmap({
         <div className="px-2 pt-7 pb-6">
           <div className="relative h-1.5 rounded-full bg-white/[0.07]">
             <div
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-accent/40 to-accent/80"
+              className="absolute inset-y-0 left-0 rounded-full bg-accent/70"
               style={{ width: position(Math.min(now, end)) }}
             />
             {now >= start && now <= end ? (
